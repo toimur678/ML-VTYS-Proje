@@ -1,8 +1,3 @@
-# Home Energy Bill Predictor - README
-
-Here's a simple, clean README for your GitHub repository:
-
-```markdown
 # 🏠 Home Energy Bill Predictor
 
 A machine learning web application that predicts monthly electricity bills based on home characteristics and consumption patterns. Built for university coursework combining Database Management and Machine Learning.
