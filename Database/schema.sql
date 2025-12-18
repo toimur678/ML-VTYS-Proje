@@ -1,16 +1,8 @@
--- ============================================
 -- SMART CITY ENERGY CONSUMPTION PREDICTION SYSTEM
 -- Home Energy Bill Predictor - Database Schema
 -- PostgreSQL Database on Supabase
 -- Created by: Sharonne 
 -- Date: December 2024
--- ============================================
--- This file contains EXACTLY what was executed on Supabase
--- ============================================
-
--- ============================================
--- STEP 1: DROP EXISTING TABLES (Clean Start)
--- ============================================
 
 DROP TABLE IF EXISTS BillHistory CASCADE;
 DROP TABLE IF EXISTS Predictions CASCADE;
@@ -19,9 +11,6 @@ DROP TABLE IF EXISTS EnergyConsumption CASCADE;
 DROP TABLE IF EXISTS Homes CASCADE;
 DROP TABLE IF EXISTS Users CASCADE;
 
--- ============================================
--- STEP 2: CREATE TABLES WITH ALL CONSTRAINTS
--- ============================================
 
 -- TABLE 1: Users
 CREATE TABLE Users (
@@ -114,9 +103,6 @@ CREATE TABLE BillHistory (
     CONSTRAINT unique_bill_period UNIQUE (home_id, month, year)
 );
 
--- ============================================
--- STEP 2.2: CREATE INDEXES FOR PERFORMANCE
--- ============================================
 
 CREATE INDEX idx_homes_user ON Homes(user_id);
 CREATE INDEX idx_consumption_home ON EnergyConsumption(home_id);
@@ -131,9 +117,6 @@ CREATE INDEX idx_users_email ON Users(email);
 COMMENT ON INDEX idx_homes_user IS 'Optimizes home queries by user';
 COMMENT ON INDEX idx_consumption_date IS 'Optimizes temporal consumption queries';
 
--- ============================================
--- STEP 3: CREATE 5 REQUIRED VIEWS
--- ============================================
 
 -- VIEW 1: vw_UserHomeSummary
 CREATE OR REPLACE VIEW vw_UserHomeSummary AS
@@ -236,9 +219,6 @@ LEFT JOIN EnergyConsumption ec ON h.home_id = ec.home_id
 GROUP BY a.appliance_type
 ORDER BY estimated_monthly_kwh DESC;
 
--- ============================================
--- STEP 4: CREATE 2 USER-DEFINED FUNCTIONS
--- ============================================
 
 -- FUNCTION 1: fn_CalculateSeasonFactor
 CREATE OR REPLACE FUNCTION fn_CalculateSeasonFactor(check_month INT)
@@ -300,9 +280,6 @@ SELECT
     END AS season
 FROM generate_series(1, 12) AS month_num;
 
--- ============================================
--- STEP 5: CREATE 2 STORED PROCEDURES
--- ============================================
 
 -- STORED PROCEDURE 1: sp_SavePrediction
 CREATE OR REPLACE PROCEDURE sp_SavePrediction(
@@ -403,10 +380,6 @@ BEGIN
 END;
 $$;
 
--- ============================================
--- STEP 6: SECURITY CONFIGURATION (Row Level Security)
--- ============================================
-
 -- Enable RLS on all tables
 ALTER TABLE Users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Homes ENABLE ROW LEVEL SECURITY;
@@ -462,9 +435,6 @@ CREATE POLICY bills_select_own ON BillHistory
         WHERE user_id IN (SELECT user_id FROM Users WHERE auth.uid()::text = user_id::text)
     ));
 
--- ============================================
--- DATA MASKING VIEWS
--- ============================================
 
 -- Masked Users View
 CREATE OR REPLACE VIEW vw_Users_Masked AS

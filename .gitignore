@@ -82,3 +82,9 @@ out/
 # Temporary files
 *.tmp
 *.temp
+
+# Environment variables
+.env.example
+.env
+.env.local
+.env.production

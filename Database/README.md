@@ -46,10 +46,7 @@ psql YOUR_DATABASE_URL < schema.sql
 ```
 
 ### 3. Configure Environment
-```bash
-cp .env.example .env
-# Edit .env with your credentials
-```
+- Put your .env.example file on ENV folder on root dir.
 
 ## 🔌 Usage Examples
 
