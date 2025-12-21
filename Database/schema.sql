@@ -1,9 +1,12 @@
+-- ============================================
 -- SMART CITY ENERGY CONSUMPTION PREDICTION SYSTEM
--- Home Energy Bill Predictor - Database Schema
--- PostgreSQL Database on Supabase
--- Created by: Sharonne 
--- Date: December 2024
+-- Database Schema
+-- Student Project - Requirements Implementation
+-- ============================================
 
+-- [REQ: RDBMS] PostgreSQL (Supabase)
+
+-- CLEANUP
 DROP TABLE IF EXISTS BillHistory CASCADE;
 DROP TABLE IF EXISTS Predictions CASCADE;
 DROP TABLE IF EXISTS Appliances CASCADE;
@@ -11,23 +14,30 @@ DROP TABLE IF EXISTS EnergyConsumption CASCADE;
 DROP TABLE IF EXISTS Homes CASCADE;
 DROP TABLE IF EXISTS Users CASCADE;
 
+-- ============================================
+-- 1. TABLES (ENTITIES) [REQ: At least 6 entities]
+-- ============================================
 
 -- TABLE 1: Users
 CREATE TABLE Users (
-    user_id SERIAL PRIMARY KEY,
+    -- [REQ: Data Integrity] Using UUID to match Auth System ID exactly
+    user_id UUID PRIMARY KEY, 
     name VARCHAR(100) NOT NULL,
-    email VARCHAR(150) NOT NULL UNIQUE,
+    -- [REQ: Constraint - Unique]
+    email VARCHAR(150) NOT NULL UNIQUE, 
     password VARCHAR(255) NOT NULL,
     phone VARCHAR(20) UNIQUE,
-    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+    -- [REQ: Constraint - Check]
+    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('admin', 'user')), 
     created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- TABLE 2: Homes
 CREATE TABLE Homes (
     home_id SERIAL PRIMARY KEY,
-    user_id INT NOT NULL,
+    user_id UUID NOT NULL, -- UUID to match Users table
     address TEXT NOT NULL,
+    -- [REQ: Constraint - Check]
     home_type VARCHAR(50) NOT NULL CHECK (home_type IN ('apartment', 'house')),
     size_m2 DECIMAL(8,2) CHECK (size_m2 > 0),
     num_rooms INT CHECK (num_rooms > 0),
@@ -35,6 +45,7 @@ CREATE TABLE Homes (
     has_heater BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT NOW(),
     
+    -- [REQ: Constraint - Foreign Key]
     CONSTRAINT fk_homes_user FOREIGN KEY (user_id) 
         REFERENCES Users(user_id) ON DELETE CASCADE
 );
@@ -52,6 +63,9 @@ CREATE TABLE EnergyConsumption (
     
     CONSTRAINT fk_consumption_home FOREIGN KEY (home_id) 
         REFERENCES Homes(home_id) ON DELETE CASCADE,
+    
+    -- [REQ: Constraint - Unique (Composite)] 
+    -- Ensures a home can't have duplicate records for the same month/year
     CONSTRAINT unique_consumption_period UNIQUE (home_id, month, year)
 );
 
@@ -59,7 +73,7 @@ CREATE TABLE EnergyConsumption (
 CREATE TABLE Predictions (
     prediction_id SERIAL PRIMARY KEY,
     home_id INT NOT NULL,
-    user_id INT NOT NULL,
+    user_id UUID NOT NULL, -- UUID to match Users table
     predicted_kwh DECIMAL(10,2) CHECK (predicted_kwh >= 0),
     predicted_bill DECIMAL(10,2) CHECK (predicted_bill >= 0),
     prediction_date TIMESTAMP DEFAULT NOW(),
@@ -103,7 +117,9 @@ CREATE TABLE BillHistory (
     CONSTRAINT unique_bill_period UNIQUE (home_id, month, year)
 );
 
-
+-- ============================================
+-- 2. INDEXES [REQ: Query Performance Strategy]
+-- ============================================
 CREATE INDEX idx_homes_user ON Homes(user_id);
 CREATE INDEX idx_consumption_home ON EnergyConsumption(home_id);
 CREATE INDEX idx_consumption_date ON EnergyConsumption(year, month);
@@ -114,273 +130,143 @@ CREATE INDEX idx_bills_home ON BillHistory(home_id);
 CREATE INDEX idx_bills_date ON BillHistory(year, month);
 CREATE INDEX idx_users_email ON Users(email);
 
-COMMENT ON INDEX idx_homes_user IS 'Optimizes home queries by user';
-COMMENT ON INDEX idx_consumption_date IS 'Optimizes temporal consumption queries';
+-- ============================================
+-- 3. VIEWS [REQ: At least 5 views]
+-- ============================================
 
-
--- VIEW 1: vw_UserHomeSummary
+-- VIEW 1: Summary of User Homes and Totals
 CREATE OR REPLACE VIEW vw_UserHomeSummary AS
 SELECT 
     u.user_id,
     u.name,
     u.email,
-    u.phone,
     h.home_id,
     h.address,
     h.home_type,
-    h.size_m2,
-    h.num_rooms,
-    COALESCE(SUM(ec.kwh_used), 0) AS total_kwh_consumed,
-    COALESCE(SUM(ec.bill_amount), 0) AS total_bill_amount,
-    COUNT(DISTINCT ec.consumption_id) AS total_records
+    COALESCE(SUM(ec.kwh_used), 0) AS total_kwh,
+    COALESCE(SUM(ec.bill_amount), 0) AS total_bill
 FROM Users u
 LEFT JOIN Homes h ON u.user_id = h.user_id
 LEFT JOIN EnergyConsumption ec ON h.home_id = ec.home_id
-GROUP BY u.user_id, u.name, u.email, u.phone, h.home_id, h.address, h.home_type, h.size_m2, h.num_rooms;
+GROUP BY u.user_id, u.name, u.email, h.home_id, h.address, h.home_type;
 
--- VIEW 2: vw_MonthlyConsumption
+-- VIEW 2: Monthly Consumption Analysis
 CREATE OR REPLACE VIEW vw_MonthlyConsumption AS
 SELECT 
     h.home_id,
     h.address,
-    u.name AS owner_name,
     ec.year,
     ec.month,
     ec.kwh_used,
     ec.bill_amount,
-    ec.avg_temperature,
     ROUND(ec.bill_amount / NULLIF(ec.kwh_used, 0), 2) AS cost_per_kwh
 FROM EnergyConsumption ec
-JOIN Homes h ON ec.home_id = h.home_id
-JOIN Users u ON h.user_id = u.user_id
-ORDER BY ec.year DESC, ec.month DESC;
+JOIN Homes h ON ec.home_id = h.home_id;
 
--- VIEW 3: vw_PredictionAccuracy
+-- VIEW 3: Prediction Accuracy (ML Performance)
 CREATE OR REPLACE VIEW vw_PredictionAccuracy AS
 SELECT 
     p.prediction_id,
     h.home_id,
-    h.address,
-    u.name AS owner_name,
-    EXTRACT(MONTH FROM p.prediction_date) AS predicted_month,
-    EXTRACT(YEAR FROM p.prediction_date) AS predicted_year,
-    p.predicted_kwh,
     p.predicted_bill,
-    p.ml_confidence_score,
-    bh.actual_amount AS actual_bill,
-    ec.kwh_used AS actual_kwh,
-    ROUND(ABS(p.predicted_bill - bh.actual_amount), 2) AS bill_difference,
-    ROUND(ABS(p.predicted_kwh - ec.kwh_used), 2) AS kwh_difference,
-    ROUND((ABS(p.predicted_bill - bh.actual_amount) / NULLIF(bh.actual_amount, 0)) * 100, 2) AS error_percentage
+    bh.actual_amount,
+    ROUND(ABS(p.predicted_bill - bh.actual_amount), 2) AS error_amount
 FROM Predictions p
 JOIN Homes h ON p.home_id = h.home_id
-JOIN Users u ON h.user_id = u.user_id
-LEFT JOIN BillHistory bh ON h.home_id = bh.home_id 
+JOIN BillHistory bh ON h.home_id = bh.home_id 
     AND EXTRACT(MONTH FROM p.prediction_date) = bh.month
-    AND EXTRACT(YEAR FROM p.prediction_date) = bh.year
-LEFT JOIN EnergyConsumption ec ON h.home_id = ec.home_id
-    AND EXTRACT(MONTH FROM p.prediction_date) = ec.month
-    AND EXTRACT(YEAR FROM p.prediction_date) = ec.year;
+    AND EXTRACT(YEAR FROM p.prediction_date) = bh.year;
 
--- VIEW 4: vw_HighConsumers
+-- VIEW 4: High Consumers (Filter Logic)
 CREATE OR REPLACE VIEW vw_HighConsumers AS
-SELECT 
-    u.user_id,
-    u.name,
-    u.email,
-    h.home_id,
-    h.address,
-    h.home_type,
-    h.size_m2,
-    ec.year,
-    ec.month,
-    ec.kwh_used,
-    ec.bill_amount,
-    RANK() OVER (PARTITION BY ec.year, ec.month ORDER BY ec.kwh_used DESC) AS consumption_rank
-FROM Users u
-JOIN Homes h ON u.user_id = h.user_id
-JOIN EnergyConsumption ec ON h.home_id = ec.home_id
-WHERE ec.kwh_used > 500
-ORDER BY ec.year DESC, ec.month DESC, ec.kwh_used DESC;
+SELECT * FROM EnergyConsumption
+WHERE kwh_used > 500;
 
--- VIEW 5: vw_ApplianceImpact
+-- VIEW 5: Appliance Impact Analysis
 CREATE OR REPLACE VIEW vw_ApplianceImpact AS
 SELECT 
-    a.appliance_type,
-    COUNT(DISTINCT a.home_id) AS homes_with_appliance,
-    SUM(a.quantity) AS total_quantity,
-    ROUND(AVG(a.avg_hours_per_day), 2) AS avg_usage_hours,
-    ROUND(AVG(a.wattage), 2) AS avg_wattage,
-    ROUND(AVG((a.wattage * a.avg_hours_per_day * 30) / 1000), 2) AS estimated_monthly_kwh,
-    ROUND(AVG(ec.kwh_used), 2) AS avg_home_consumption
-FROM Appliances a
-JOIN Homes h ON a.home_id = h.home_id
-LEFT JOIN EnergyConsumption ec ON h.home_id = ec.home_id
-GROUP BY a.appliance_type
-ORDER BY estimated_monthly_kwh DESC;
+    appliance_type,
+    COUNT(*) as total_units,
+    ROUND(AVG(wattage), 2) as avg_watts
+FROM Appliances
+GROUP BY appliance_type;
 
+-- ============================================
+-- 4. FUNCTIONS [REQ: At least 2 UDFs]
+-- ============================================
 
--- FUNCTION 1: fn_CalculateSeasonFactor
+-- FUNCTION 1: Calculate Season Factor
 CREATE OR REPLACE FUNCTION fn_CalculateSeasonFactor(check_month INT)
 RETURNS DECIMAL(3,2)
 LANGUAGE plpgsql
 AS $$
-DECLARE
-    season_factor DECIMAL(3,2);
 BEGIN
-    IF check_month < 1 OR check_month > 12 THEN
-        RAISE EXCEPTION 'Invalid month: %. Must be between 1 and 12', check_month;
+    IF check_month IN (12, 1, 2) THEN RETURN 1.4; -- Winter
+    ELSIF check_month IN (6, 7, 8) THEN RETURN 1.3; -- Summer
+    ELSIF check_month IN (3, 4, 5) THEN RETURN 0.9; -- Spring
+    ELSE RETURN 1.0; -- Fall
     END IF;
-    
-    CASE 
-        WHEN check_month IN (12, 1, 2) THEN
-            season_factor := 1.4;
-        WHEN check_month IN (3, 4, 5) THEN
-            season_factor := 0.9;
-        WHEN check_month IN (6, 7, 8) THEN
-            season_factor := 1.3;
-        WHEN check_month IN (9, 10, 11) THEN
-            season_factor := 1.0;
-    END CASE;
-    
-    RETURN season_factor;
 END;
 $$;
 
--- FUNCTION 2: fn_GetAverageBill
+-- FUNCTION 2: Get Average Bill for Home
 CREATE OR REPLACE FUNCTION fn_GetAverageBill(p_home_id INT)
 RETURNS DECIMAL(10,2)
 LANGUAGE plpgsql
 AS $$
-DECLARE
-    avg_bill DECIMAL(10,2);
+DECLARE avg_bill DECIMAL(10,2);
 BEGIN
-    SELECT COALESCE(AVG(bill_amount), 0)
-    INTO avg_bill
-    FROM EnergyConsumption
-    WHERE home_id = p_home_id;
-    
-    IF avg_bill IS NULL THEN
-        avg_bill := 0;
-    END IF;
-    
-    RETURN ROUND(avg_bill, 2);
+    SELECT COALESCE(AVG(bill_amount), 0) INTO avg_bill
+    FROM EnergyConsumption WHERE home_id = p_home_id;
+    RETURN avg_bill;
 END;
 $$;
 
--- Test functions
-SELECT 
-    month_num,
-    fn_CalculateSeasonFactor(month_num) AS season_factor,
-    CASE 
-        WHEN month_num IN (12,1,2) THEN 'Winter'
-        WHEN month_num IN (3,4,5) THEN 'Spring'
-        WHEN month_num IN (6,7,8) THEN 'Summer'
-        ELSE 'Fall'
-    END AS season
-FROM generate_series(1, 12) AS month_num;
+-- ============================================
+-- 5. STORED PROCEDURES [REQ: At least 2 SPs]
+-- ============================================
 
-
--- STORED PROCEDURE 1: sp_SavePrediction
+-- PROCEDURE 1: Save Prediction (Transaction Logic)
+-- [NOTE]: Updated to accept UUID for user_id to prevent Type Error
 CREATE OR REPLACE PROCEDURE sp_SavePrediction(
     p_home_id INT,
-    p_user_id INT,
-    p_predicted_kwh DECIMAL(10,2),
-    p_predicted_bill DECIMAL(10,2),
-    p_confidence_score DECIMAL(5,4)
+    p_user_id UUID, 
+    p_predicted_kwh DECIMAL,
+    p_predicted_bill DECIMAL,
+    p_confidence_score DECIMAL
 )
 LANGUAGE plpgsql
 AS $$
-DECLARE
-    v_home_exists BOOLEAN;
-    v_user_owns_home BOOLEAN;
 BEGIN
-    SELECT EXISTS(SELECT 1 FROM Homes WHERE home_id = p_home_id)
-    INTO v_home_exists;
-    
-    IF NOT v_home_exists THEN
-        RAISE EXCEPTION 'Home with ID % does not exist', p_home_id;
-    END IF;
-    
-    SELECT EXISTS(
-        SELECT 1 FROM Homes 
-        WHERE home_id = p_home_id AND user_id = p_user_id
-    ) INTO v_user_owns_home;
-    
-    IF NOT v_user_owns_home THEN
-        RAISE EXCEPTION 'User % does not own home %', p_user_id, p_home_id;
-    END IF;
-    
-    INSERT INTO Predictions (
-        home_id, 
-        user_id, 
-        predicted_kwh, 
-        predicted_bill, 
-        ml_confidence_score,
-        prediction_date
-    ) VALUES (
-        p_home_id,
-        p_user_id,
-        p_predicted_kwh,
-        p_predicted_bill,
-        p_confidence_score,
-        NOW()
-    );
-    
-    RAISE NOTICE 'Prediction saved: % kWh, % EUR, confidence: %', 
-        p_predicted_kwh, p_predicted_bill, p_confidence_score;
+    INSERT INTO Predictions (home_id, user_id, predicted_kwh, predicted_bill, ml_confidence_score)
+    VALUES (p_home_id, p_user_id, p_predicted_kwh, p_predicted_bill, p_confidence_score);
 END;
 $$;
 
--- STORED PROCEDURE 2: sp_MonthlyReport
+-- PROCEDURE 2: Generate Monthly Report
 CREATE OR REPLACE PROCEDURE sp_MonthlyReport(
     p_home_id INT,
     p_year INT,
-    p_month INT,
-    OUT total_kwh DECIMAL(10,2),
-    OUT total_bill DECIMAL(10,2),
-    OUT avg_temp DECIMAL(5,2),
-    OUT appliance_count INT,
-    OUT season_factor DECIMAL(3,2)
+    p_month INT
 )
 LANGUAGE plpgsql
 AS $$
+DECLARE 
+    v_total_kwh DECIMAL;
 BEGIN
-    SELECT 
-        COALESCE(ec.kwh_used, 0),
-        COALESCE(ec.bill_amount, 0),
-        COALESCE(ec.avg_temperature, 0)
-    INTO total_kwh, total_bill, avg_temp
-    FROM EnergyConsumption ec
-    WHERE ec.home_id = p_home_id 
-      AND ec.year = p_year 
-      AND ec.month = p_month;
+    SELECT kwh_used INTO v_total_kwh 
+    FROM EnergyConsumption 
+    WHERE home_id = p_home_id AND year = p_year AND month = p_month;
     
-    IF total_kwh IS NULL THEN
-        total_kwh := 0;
-        total_bill := 0;
-        avg_temp := 0;
-    END IF;
-    
-    SELECT COUNT(*)
-    INTO appliance_count
-    FROM Appliances
-    WHERE home_id = p_home_id;
-    
-    season_factor := fn_CalculateSeasonFactor(p_month);
-    
-    RAISE NOTICE '========== MONTHLY REPORT ==========';
-    RAISE NOTICE 'Home: %, Period: %/%', p_home_id, p_month, p_year;
-    RAISE NOTICE 'Consumption: % kWh', total_kwh;
-    RAISE NOTICE 'Bill: % EUR', total_bill;
-    RAISE NOTICE 'Average Temperature: % °C', avg_temp;
-    RAISE NOTICE 'Number of Appliances: %', appliance_count;
-    RAISE NOTICE 'Season Factor: %', season_factor;
-    RAISE NOTICE '====================================';
+    RAISE NOTICE 'Total Consumption: %', v_total_kwh;
 END;
 $$;
 
--- Enable RLS on all tables
+-- ============================================
+-- 6. SECURITY & MASKING [REQ: Authorization & Masking]
+-- ============================================
+
+-- Enable Row Level Security (Authorization)
 ALTER TABLE Users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Homes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE EnergyConsumption ENABLE ROW LEVEL SECURITY;
@@ -388,82 +274,40 @@ ALTER TABLE Predictions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Appliances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE BillHistory ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for Users
-CREATE POLICY user_select_own ON Users
-    FOR SELECT
-    USING (auth.uid()::text = user_id::text OR role = 'admin');
+-- RLS Policies (Fixing UUID comparison)
+CREATE POLICY user_select_own ON Users FOR SELECT USING (auth.uid() = user_id);
+-- [CRITICAL FIX]: Allow users to insert their own profile upon registration
+CREATE POLICY user_insert_own ON Users FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY user_update_own ON Users
-    FOR UPDATE
-    USING (auth.uid()::text = user_id::text);
+CREATE POLICY homes_select_own ON Homes FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY homes_insert_own ON Homes FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY homes_update_own ON Homes FOR UPDATE USING (user_id = auth.uid());
+CREATE POLICY homes_delete_own ON Homes FOR DELETE USING (user_id = auth.uid());
 
--- RLS Policies for Homes
-CREATE POLICY homes_select_own ON Homes
-    FOR SELECT
-    USING (user_id IN (SELECT user_id FROM Users WHERE auth.uid()::text = user_id::text));
+CREATE POLICY consumption_select_own ON EnergyConsumption FOR SELECT 
+USING (home_id IN (SELECT home_id FROM Homes WHERE user_id = auth.uid()));
 
-CREATE POLICY homes_insert_own ON Homes
-    FOR INSERT
-    WITH CHECK (user_id IN (SELECT user_id FROM Users WHERE auth.uid()::text = user_id::text));
+CREATE POLICY predictions_select_own ON Predictions FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY predictions_insert_own ON Predictions FOR INSERT WITH CHECK (user_id = auth.uid());
 
--- RLS Policies for EnergyConsumption
-CREATE POLICY consumption_select_own ON EnergyConsumption
-    FOR SELECT
-    USING (home_id IN (
-        SELECT home_id FROM Homes 
-        WHERE user_id IN (SELECT user_id FROM Users WHERE auth.uid()::text = user_id::text)
-    ));
+CREATE POLICY appliances_select_own ON Appliances FOR SELECT 
+USING (home_id IN (SELECT home_id FROM Homes WHERE user_id = auth.uid()));
 
--- RLS Policies for Predictions
-CREATE POLICY predictions_select_own ON Predictions
-    FOR SELECT
-    USING (user_id IN (SELECT user_id FROM Users WHERE auth.uid()::text = user_id::text));
+CREATE POLICY bill_select_own ON BillHistory FOR SELECT 
+USING (home_id IN (SELECT home_id FROM Homes WHERE user_id = auth.uid()));
 
--- RLS Policies for Appliances
-CREATE POLICY appliances_select_own ON Appliances
-    FOR SELECT
-    USING (home_id IN (
-        SELECT home_id FROM Homes 
-        WHERE user_id IN (SELECT user_id FROM Users WHERE auth.uid()::text = user_id::text)
-    ));
-
--- RLS Policies for BillHistory
-CREATE POLICY bills_select_own ON BillHistory
-    FOR SELECT
-    USING (home_id IN (
-        SELECT home_id FROM Homes 
-        WHERE user_id IN (SELECT user_id FROM Users WHERE auth.uid()::text = user_id::text)
-    ));
-
-
--- Masked Users View
+-- Masking Views [REQ: Masking Operations]
 CREATE OR REPLACE VIEW vw_Users_Masked AS
 SELECT 
     user_id,
     name,
-    CONCAT(
-        LEFT(email, 1),
-        '***@',
-        SPLIT_PART(email, '@', 2)
-    ) AS email_masked,
-    CONCAT(
-        LEFT(phone, 6),
-        '** ** ** ',
-        RIGHT(phone, 2)
-    ) AS phone_masked,
-    role,
-    created_at
+    CONCAT(LEFT(email, 1), '***@', SPLIT_PART(email, '@', 2)) AS email_masked, -- Masking Email
+    role
 FROM Users;
 
--- Masked Bills View
 CREATE OR REPLACE VIEW vw_Bills_Masked AS
 SELECT 
     bill_id,
     home_id,
-    month,
-    year,
-    CONCAT(FLOOR(actual_amount), '.XX') AS actual_amount_masked,
-    due_date,
-    paid
+    CONCAT('$', FLOOR(actual_amount), '.XX') AS amount_masked -- Masking Financial Data
 FROM BillHistory;
-
