@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Home, Plus, Edit, Trash2, MapPin, Square, Bed } from 'lucide-react'
+import { Home, Plus, Edit, Trash2, MapPin, Square, Bed, Tv, Zap } from 'lucide-react'
 import { supabase } from '../services/supabase'
 
 const Homes = ({ user }) => {
@@ -7,6 +7,18 @@ const Homes = ({ user }) => {
   const [showModal, setShowModal] = useState(false)
   const [editingHome, setEditingHome] = useState(null)
   const [loading, setLoading] = useState(true)
+  
+  // Appliance Management State
+  const [showApplianceModal, setShowApplianceModal] = useState(false)
+  const [selectedHome, setSelectedHome] = useState(null)
+  const [appliances, setAppliances] = useState([])
+  const [newAppliance, setNewAppliance] = useState({
+    appliance_type: 'fridge',
+    quantity: 1,
+    wattage: 150,
+    avg_hours_per_day: 24
+  })
+
   const [formData, setFormData] = useState({
     address: '',
     home_type: 'apartment',
@@ -34,6 +46,70 @@ const Homes = ({ user }) => {
       console.error('Error loading homes:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Appliance Functions
+  const openApplianceModal = async (home) => {
+    setSelectedHome(home)
+    setShowApplianceModal(true)
+    await loadAppliances(home.home_id)
+  }
+
+  const loadAppliances = async (homeId) => {
+    try {
+      const { data, error } = await supabase
+        .from('Appliances')
+        .select('*')
+        .eq('home_id', homeId)
+      
+      if (error) throw error
+      setAppliances(data || [])
+    } catch (error) {
+      console.error('Error loading appliances:', error)
+    }
+  }
+
+  const handleAddAppliance = async (e) => {
+    e.preventDefault()
+    try {
+      const { error } = await supabase
+        .from('Appliances')
+        .insert([{
+          ...newAppliance,
+          home_id: selectedHome.home_id,
+          quantity: parseInt(newAppliance.quantity),
+          wattage: parseInt(newAppliance.wattage),
+          avg_hours_per_day: parseFloat(newAppliance.avg_hours_per_day)
+        }])
+
+      if (error) throw error
+      
+      await loadAppliances(selectedHome.home_id)
+      // Reset form to defaults
+      setNewAppliance({
+        appliance_type: 'fridge',
+        quantity: 1,
+        wattage: 150,
+        avg_hours_per_day: 24
+      })
+    } catch (error) {
+      console.error('Error adding appliance:', error)
+      alert('Failed to add appliance')
+    }
+  }
+
+  const handleDeleteAppliance = async (applianceId) => {
+    try {
+      const { error } = await supabase
+        .from('Appliances')
+        .delete()
+        .eq('appliance_id', applianceId)
+
+      if (error) throw error
+      await loadAppliances(selectedHome.home_id)
+    } catch (error) {
+      console.error('Error deleting appliance:', error)
     }
   }
 
@@ -224,8 +300,127 @@ const Homes = ({ user }) => {
                   </span>
                 )}
               </div>
+              
+              <button
+                onClick={() => openApplianceModal(home)}
+                className="w-full mt-4 btn-secondary flex items-center justify-center space-x-2 text-sm py-2"
+              >
+                <Tv className="w-4 h-4" />
+                <span>Manage Appliances</span>
+              </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Appliance Management Modal */}
+      {showApplianceModal && selectedHome && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-6 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">Manage Appliances</h2>
+                <p className="text-slate-600 text-sm">{selectedHome.address}</p>
+              </div>
+              <button 
+                onClick={() => setShowApplianceModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <span className="text-2xl">&times;</span>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Add Appliance Form */}
+              <form onSubmit={handleAddAppliance} className="bg-slate-50 p-4 rounded-lg space-y-4">
+                <h3 className="font-semibold text-slate-700">Add New Appliance</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
+                    <select
+                      value={newAppliance.appliance_type}
+                      onChange={(e) => setNewAppliance({...newAppliance, appliance_type: e.target.value})}
+                      className="input-field text-sm"
+                    >
+                      <option value="fridge">Fridge</option>
+                      <option value="AC">AC</option>
+                      <option value="heater">Heater</option>
+                      <option value="TV">TV</option>
+                      <option value="washing_machine">Washing Machine</option>
+                      <option value="dishwasher">Dishwasher</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newAppliance.quantity}
+                      onChange={(e) => setNewAppliance({...newAppliance, quantity: e.target.value})}
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Wattage (W)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newAppliance.wattage}
+                      onChange={(e) => setNewAppliance({...newAppliance, wattage: e.target.value})}
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Hours/Day</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="24"
+                      step="0.1"
+                      value={newAppliance.avg_hours_per_day}
+                      onChange={(e) => setNewAppliance({...newAppliance, avg_hours_per_day: e.target.value})}
+                      className="input-field text-sm"
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="btn-primary w-full text-sm py-2">
+                  Add Appliance
+                </button>
+              </form>
+
+              {/* Appliances List */}
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-3">Current Appliances</h3>
+                {appliances.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center py-4">No appliances added yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {appliances.map((app) => (
+                      <div key={app.appliance_id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-blue-50 rounded-lg">
+                            <Zap className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-800 capitalize">{app.appliance_type}</p>
+                            <p className="text-xs text-slate-500">
+                              {app.quantity} units • {app.wattage}W • {app.avg_hours_per_day}h/day
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteAppliance(app.appliance_id)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

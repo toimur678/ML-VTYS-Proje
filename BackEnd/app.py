@@ -1,12 +1,21 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # <--- IMPORT THIS
 import joblib
 import pandas as pd
+import os
 
 app = Flask(__name__)
+CORS(app)  # <--- ENABLE THIS
 
-# Loading trained model and scaler
-model = joblib.load('energy_bill_model.pkl')
-scaler = joblib.load('scaler.pkl')
+# Get the directory where app.py is located
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Loading trained model and scaler with absolute paths to avoid errors
+try:
+    model = joblib.load(os.path.join(BASE_DIR, 'energy_bill_model.pkl'))
+    scaler = joblib.load(os.path.join(BASE_DIR, 'scaler.pkl'))
+except FileNotFoundError:
+    print("Error: Model files not found. Make sure .pkl files are in the BackEnd directory.")
 
 WEATHER_LOOKUP = {
     1: {'temp_degree_days': 5816.356385018535, 'temp_cdd': 1516.2217819250927, 'temp_hdd': 4300.134603093443},
@@ -30,16 +39,12 @@ def predict():
         if month in WEATHER_LOOKUP:
             weather_data = WEATHER_LOOKUP[month]
         else:
-            # If we don't have a direct lookup for the month, map it
-            # to the nearest available month in WEATHER_LOOKUP by wrapping.
-            # This lets the API accept 1-12 while reusing available weather stats.
+            # Wrap months > 5 back to the available data (Mock logic)
             max_key = max(WEATHER_LOOKUP.keys())
             mapped_month = ((month - 1) % max_key) + 1
-            app.logger.warning(f"Month %s not in WEATHER_LOOKUP, mapping to %s", month, mapped_month)
             weather_data = WEATHER_LOOKUP[mapped_month]
             
         # 3. Prepare Features
-        # Features: ['home_size', 'num_appliances', 'temp_degree_days', 'temp_cdd', 'temp_hdd', 'month_periods']
         input_df = pd.DataFrame([{
             'home_size': home_size,
             'num_appliances': num_appliances,
@@ -59,6 +64,7 @@ def predict():
         })
 
     except Exception as e:
+        print(f"Error: {e}") # Print error to terminal for debugging
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':

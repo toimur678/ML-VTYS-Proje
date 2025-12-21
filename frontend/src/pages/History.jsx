@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, TrendingUp, DollarSign, Zap, Filter } from 'lucide-react'
+import { Calendar, TrendingUp, DollarSign, Zap, Filter, Plus } from 'lucide-react'
 import { supabase } from '../services/supabase'
 
 const History = ({ user }) => {
@@ -8,6 +8,17 @@ const History = ({ user }) => {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('consumption') // 'consumption' or 'predictions'
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  
+  // Add Record State
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [homes, setHomes] = useState([])
+  const [newRecord, setNewRecord] = useState({
+    home_id: '',
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+    kwh_used: '',
+    bill_amount: ''
+  })
 
   useEffect(() => {
     loadHistory()
@@ -16,13 +27,15 @@ const History = ({ user }) => {
   const loadHistory = async () => {
     try {
       // Get user's homes
-      const { data: homes } = await supabase
+      const { data: homesData } = await supabase
         .from('Homes')
         .select('home_id, address')
         .eq('user_id', user.id)
+      
+      setHomes(homesData || [])
 
-      if (homes && homes.length > 0) {
-        const homeIds = homes.map(h => h.home_id)
+      if (homesData && homesData.length > 0) {
+        const homeIds = homesData.map(h => h.home_id)
 
         // Get consumption history
         const { data: consumption } = await supabase
@@ -35,7 +48,7 @@ const History = ({ user }) => {
         // Map home addresses to consumption records
         const consumptionWithHomes = consumption?.map(c => ({
           ...c,
-          address: homes.find(h => h.home_id === c.home_id)?.address || 'Unknown',
+          address: homesData.find(h => h.home_id === c.home_id)?.address || 'Unknown',
         })) || []
 
         setHistory(consumptionWithHomes)
@@ -54,6 +67,51 @@ const History = ({ user }) => {
       console.error('Error loading history:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAddRecord = async (e) => {
+    e.preventDefault()
+    try {
+      // Add to EnergyConsumption
+      const { error: consumptionError } = await supabase
+        .from('EnergyConsumption')
+        .insert([{
+          home_id: parseInt(newRecord.home_id),
+          month: parseInt(newRecord.month),
+          year: parseInt(newRecord.year),
+          kwh_used: parseFloat(newRecord.kwh_used),
+          bill_amount: parseFloat(newRecord.bill_amount)
+        }])
+
+      if (consumptionError) throw consumptionError
+      
+      // Add to BillHistory
+      const { error: billError } = await supabase
+        .from('BillHistory')
+        .insert([{
+            home_id: parseInt(newRecord.home_id),
+            month: parseInt(newRecord.month),
+            year: parseInt(newRecord.year),
+            actual_amount: parseFloat(newRecord.bill_amount),
+            due_date: new Date().toISOString(),
+            paid: false
+        }])
+
+      if (billError) console.warn('Error adding to BillHistory:', billError)
+
+      setShowAddModal(false)
+      loadHistory()
+      setNewRecord({
+        home_id: '',
+        month: new Date().getMonth() + 1,
+        year: new Date().getFullYear(),
+        kwh_used: '',
+        bill_amount: ''
+      })
+    } catch (error) {
+      console.error('Error adding record:', error)
+      alert('Failed to add record. It might already exist for this month.')
     }
   }
 
@@ -83,13 +141,22 @@ const History = ({ user }) => {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-slate-800 mb-2 font-display">
-          History & Records 📊
-        </h1>
-        <p className="text-slate-600 text-lg">
-          View your past consumption, bills, and predictions
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-slate-800 mb-2 font-display">
+            History & Records 📊
+          </h1>
+          <p className="text-slate-600 text-lg">
+            View your past consumption, bills, and predictions
+          </p>
+        </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="btn-primary flex items-center space-x-2"
+        >
+          <Plus className="w-5 h-5" />
+          <span>Add Record</span>
+        </button>
       </div>
 
       {/* Tabs */}
@@ -292,6 +359,96 @@ const History = ({ user }) => {
                         <p className="text-2xl font-bold text-primary-800">
                           ${parseFloat(prediction.predicted_bill).toFixed(2)}
                         </p>
+      {/* Add Record Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-6 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-slate-800">Add Consumption Record</h2>
+              <button 
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <span className="text-2xl">&times;</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddRecord} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Home</label>
+                <select
+                  required
+                  value={newRecord.home_id}
+                  onChange={(e) => setNewRecord({...newRecord, home_id: e.target.value})}
+                  className="input-field"
+                >
+                  <option value="">Select Home</option>
+                  {homes.map(h => (
+                    <option key={h.home_id} value={h.home_id}>{h.address}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Month</label>
+                  <select
+                    value={newRecord.month}
+                    onChange={(e) => setNewRecord({...newRecord, month: e.target.value})}
+                    className="input-field"
+                  >
+                    {months.map((m, i) => (
+                      <option key={i} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Year</label>
+                  <select
+                    value={newRecord.year}
+                    onChange={(e) => setNewRecord({...newRecord, year: e.target.value})}
+                    className="input-field"
+                  >
+                    {years.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Consumption (kWh)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  value={newRecord.kwh_used}
+                  onChange={(e) => setNewRecord({...newRecord, kwh_used: e.target.value})}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Bill Amount ($)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  value={newRecord.bill_amount}
+                  onChange={(e) => setNewRecord({...newRecord, bill_amount: e.target.value})}
+                  className="input-field"
+                />
+              </div>
+
+              <button type="submit" className="btn-primary w-full py-3 mt-2">
+                Save Record
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
                       </div>
                     </div>
                   </div>

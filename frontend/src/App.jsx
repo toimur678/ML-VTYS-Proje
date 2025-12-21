@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { authHelpers } from './services/supabase'
+import { authHelpers, supabase } from './services/supabase'
 
 // Pages
 import Landing from './pages/Landing'
@@ -22,6 +22,18 @@ function App() {
   useEffect(() => {
     // Check for existing session
     checkUser()
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setUser(session.user)
+      } else {
+        setUser(null)
+      }
+      setLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   const checkUser = async () => {
