@@ -1,10 +1,16 @@
--- ============================================
+-- ================================================
 -- SMART CITY ENERGY CONSUMPTION PREDICTION SYSTEM
--- Database Schema
--- FIXED: Case-Sensitivity for Frontend Compatibility
+-- ================================================
+
+-- ============================================
+-- SECTION 1: CLEANUP
 -- ============================================
 
--- CLEANUP (Drop tables with quotes to be safe)
+-- Drop existing triggers and functions
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+-- Drop tables with quotes to be safe
 DROP TABLE IF EXISTS "BillHistory" CASCADE;
 DROP TABLE IF EXISTS "Predictions" CASCADE;
 DROP TABLE IF EXISTS "Appliances" CASCADE;
@@ -21,7 +27,7 @@ DROP TABLE IF EXISTS homes CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
 -- ============================================
--- 1. TABLES (With Double Quotes for Frontend Match)
+-- SECTION 2: CREATE TABLES
 -- ============================================
 
 -- TABLE 1: Users
@@ -117,8 +123,9 @@ CREATE TABLE "BillHistory" (
 );
 
 -- ============================================
--- 2. INDEXES
+-- SECTION 3: CREATE INDEXES
 -- ============================================
+
 CREATE INDEX idx_homes_user ON "Homes"(user_id);
 CREATE INDEX idx_consumption_home ON "EnergyConsumption"(home_id);
 CREATE INDEX idx_consumption_date ON "EnergyConsumption"(year, month);
@@ -129,10 +136,10 @@ CREATE INDEX idx_bills_home ON "BillHistory"(home_id);
 CREATE INDEX idx_users_email ON "Users"(email);
 
 -- ============================================
--- 3. VIEWS (Quoted to match Frontend)
+-- SECTION 4: CREATE VIEWS
 -- ============================================
 
--- VIEW 1: Summary
+-- VIEW 1: User Home Summary
 CREATE OR REPLACE VIEW "vw_UserHomeSummary" AS
 SELECT 
     u.user_id,
@@ -190,9 +197,10 @@ FROM "Appliances"
 GROUP BY appliance_type;
 
 -- ============================================
--- 4. FUNCTIONS
+-- SECTION 5: CREATE FUNCTIONS
 -- ============================================
 
+-- Function 1: Calculate Season Factor
 CREATE OR REPLACE FUNCTION fn_CalculateSeasonFactor(check_month INT)
 RETURNS DECIMAL(3,2)
 LANGUAGE plpgsql
@@ -206,6 +214,7 @@ BEGIN
 END;
 $$;
 
+-- Function 2: Get Average Bill
 CREATE OR REPLACE FUNCTION fn_GetAverageBill(p_home_id INT)
 RETURNS DECIMAL(10,2)
 LANGUAGE plpgsql
@@ -218,10 +227,33 @@ BEGIN
 END;
 $$;
 
+-- Function 3: Handle New User (Auto-sync auth.users with Users table)
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  -- Insert into Users table with data from auth.users
+  INSERT INTO public."Users" (user_id, name, email, password, role)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'name', SPLIT_PART(NEW.email, '@', 1)),
+    NEW.email,
+    'hashed', -- placeholder since we use auth
+    'user'
+  )
+  ON CONFLICT (user_id) DO NOTHING;
+  
+  RETURN NEW;
+END;
+$$;
+
 -- ============================================
--- 5. STORED PROCEDURES
+-- SECTION 6: CREATE STORED PROCEDURES
 -- ============================================
 
+-- Procedure 1: Save Prediction
 CREATE OR REPLACE PROCEDURE sp_SavePrediction(
     p_home_id INT,
     p_user_id UUID, 
@@ -237,6 +269,7 @@ BEGIN
 END;
 $$;
 
+-- Procedure 2: Monthly Report
 CREATE OR REPLACE PROCEDURE sp_MonthlyReport(
     p_home_id INT,
     p_year INT,
@@ -256,7 +289,7 @@ END;
 $$;
 
 -- ============================================
--- 6. SECURITY & POLICIES
+-- SECTION 7: ENABLE ROW LEVEL SECURITY
 -- ============================================
 
 ALTER TABLE "Users" ENABLE ROW LEVEL SECURITY;
@@ -266,33 +299,127 @@ ALTER TABLE "Predictions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Appliances" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "BillHistory" ENABLE ROW LEVEL SECURITY;
 
--- Users
-CREATE POLICY user_select_own ON "Users" FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY user_insert_own ON "Users" FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- ============================================
+-- SECTION 8: CREATE RLS POLICIES
+-- ============================================
 
--- Homes
-CREATE POLICY homes_select_own ON "Homes" FOR SELECT USING (user_id = auth.uid());
-CREATE POLICY homes_insert_own ON "Homes" FOR INSERT WITH CHECK (user_id = auth.uid());
-CREATE POLICY homes_update_own ON "Homes" FOR UPDATE USING (user_id = auth.uid());
-CREATE POLICY homes_delete_own ON "Homes" FOR DELETE USING (user_id = auth.uid());
+-- Users Policies
+CREATE POLICY user_select_own ON "Users" 
+    FOR SELECT USING (auth.uid() = user_id);
 
--- EnergyConsumption
-CREATE POLICY consumption_select_own ON "EnergyConsumption" FOR SELECT 
-USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+CREATE POLICY user_insert_own ON "Users" 
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- Predictions
-CREATE POLICY predictions_select_own ON "Predictions" FOR SELECT USING (user_id = auth.uid());
-CREATE POLICY predictions_insert_own ON "Predictions" FOR INSERT WITH CHECK (user_id = auth.uid());
+-- Homes Policies  
+CREATE POLICY homes_select_own ON "Homes" 
+    FOR SELECT USING (user_id = auth.uid());
 
--- Appliances
-CREATE POLICY appliances_select_own ON "Appliances" FOR SELECT 
-USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+CREATE POLICY homes_insert_own ON "Homes" 
+    FOR INSERT WITH CHECK (user_id = auth.uid());
 
--- BillHistory
-CREATE POLICY bill_select_own ON "BillHistory" FOR SELECT 
-USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+CREATE POLICY homes_update_own ON "Homes" 
+    FOR UPDATE USING (user_id = auth.uid());
 
--- Masking Views
+CREATE POLICY homes_delete_own ON "Homes" 
+    FOR DELETE USING (user_id = auth.uid());
+
+-- EnergyConsumption Policies  
+CREATE POLICY consumption_select_own ON "EnergyConsumption" 
+    FOR SELECT 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY consumption_insert_own ON "EnergyConsumption" 
+    FOR INSERT 
+    WITH CHECK (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY consumption_update_own ON "EnergyConsumption" 
+    FOR UPDATE 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY consumption_delete_own ON "EnergyConsumption" 
+    FOR DELETE 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+-- Predictions Policies  
+CREATE POLICY predictions_select_own ON "Predictions" 
+    FOR SELECT USING (user_id = auth.uid());
+
+CREATE POLICY predictions_insert_own ON "Predictions" 
+    FOR INSERT WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY predictions_update_own ON "Predictions" 
+    FOR UPDATE USING (user_id = auth.uid());
+
+CREATE POLICY predictions_delete_own ON "Predictions" 
+    FOR DELETE USING (user_id = auth.uid());
+
+-- Appliances Policies  
+CREATE POLICY appliances_select_own ON "Appliances" 
+    FOR SELECT 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY appliances_insert_own ON "Appliances" 
+    FOR INSERT 
+    WITH CHECK (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY appliances_update_own ON "Appliances" 
+    FOR UPDATE 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY appliances_delete_own ON "Appliances" 
+    FOR DELETE 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+-- BillHistory Policies  
+CREATE POLICY bill_select_own ON "BillHistory" 
+    FOR SELECT 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY bill_insert_own ON "BillHistory" 
+    FOR INSERT 
+    WITH CHECK (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY bill_update_own ON "BillHistory" 
+    FOR UPDATE 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+CREATE POLICY bill_delete_own ON "BillHistory" 
+    FOR DELETE 
+    USING (home_id IN (SELECT home_id FROM "Homes" WHERE user_id = auth.uid()));
+
+-- ============================================
+-- SECTION 9: CREATE TRIGGER (Auto-sync Users)
+-- ============================================
+
+-- Create trigger that fires when a new user is created in auth.users
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_new_user();
+
+-- ============================================
+-- SECTION 10: BACKFILL EXISTING USERS
+-- ============================================
+
+-- Sync all existing auth users to the Users table
+INSERT INTO public."Users" (user_id, name, email, password, role)
+SELECT 
+    au.id,
+    COALESCE(au.raw_user_meta_data->>'name', SPLIT_PART(au.email, '@', 1)),
+    au.email,
+    'hashed',
+    'user'
+FROM auth.users au
+WHERE NOT EXISTS (
+    SELECT 1 FROM public."Users" u WHERE u.user_id = au.id
+)
+ON CONFLICT (user_id) DO NOTHING;
+
+-- ============================================
+-- SECTION 11: CREATE MASKING VIEWS
+-- ============================================
+
+-- Masked Users View
 CREATE OR REPLACE VIEW "vw_Users_Masked" AS
 SELECT 
     user_id,
@@ -301,9 +428,44 @@ SELECT
     role
 FROM "Users";
 
+-- Masked Bills View
 CREATE OR REPLACE VIEW "vw_Bills_Masked" AS
 SELECT 
     bill_id,
     home_id,
     CONCAT('$', FLOOR(actual_amount), '.XX') AS amount_masked
 FROM "BillHistory";
+
+-- ============================================
+-- SECTION 12: VERIFICATION QUERIES
+-- ============================================
+
+-- Verify trigger was created
+SELECT 
+    trigger_name, 
+    event_manipulation, 
+    event_object_table
+FROM information_schema.triggers
+WHERE trigger_name = 'on_auth_user_created';
+
+-- Verify all tables were created
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public' 
+    AND table_name IN ('Users', 'Homes', 'EnergyConsumption', 'Predictions', 'Appliances', 'BillHistory')
+ORDER BY table_name;
+
+-- Verify all RLS policies were created
+SELECT 
+    schemaname, 
+    tablename, 
+    policyname, 
+    cmd 
+FROM pg_policies 
+WHERE tablename IN ('Users', 'Homes', 'EnergyConsumption', 'Predictions', 'Appliances', 'BillHistory')
+ORDER BY tablename, cmd;
+
+-- Verify user sync
+SELECT 
+    (SELECT COUNT(*) FROM auth.users) as auth_users_count,
+    (SELECT COUNT(*) FROM public."Users") as users_table_count;

@@ -1,6 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* stylelint-disable at-rule-no-unknown (Tailwind directives are handled by PostCSS/Tailwind) */
+/* stylelint-disable at-rule-no-unknown */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,62 +11,99 @@
     @apply border-slate-200;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-gradient-to-br from-slate-50 to-blue-50 text-slate-900 antialiased;
+    @apply bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 text-slate-900 antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
   }
 }
 
 @layer components {
-  .btn-primary {
-    @apply bg-sky-600 hover:bg-sky-700 text-white font-medium py-2 px-6 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0;
+  .mac-window {
+    @apply bg-mac-window backdrop-blur-xl rounded-xl shadow-2xl border border-white/40 overflow-hidden transition-all duration-300;
   }
 
-  .btn-secondary {
-    @apply bg-white hover:bg-slate-50 text-slate-700 font-medium py-2 px-6 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg border border-slate-200;
+  .mac-btn {
+    @apply bg-mac-accent text-white font-medium py-1.5 px-4 rounded-lg shadow-sm hover:bg-blue-600 active:bg-blue-700 transition-all duration-200 text-sm hover:shadow-md;
   }
 
-  .input-field {
-    @apply w-full px-4 py-3 rounded-lg border border-slate-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-200 outline-none transition-all duration-200;
+  .mac-btn-secondary {
+    @apply bg-white/80 text-slate-800 font-medium py-1.5 px-4 rounded-lg shadow-sm border border-slate-200/50 hover:bg-white transition-all duration-200 text-sm;
   }
 
-  .card {
-    @apply bg-white rounded-xl shadow-lg p-6 border border-slate-100 hover:shadow-xl transition-shadow duration-300;
+  .mac-input {
+    @apply w-full px-3 py-2 rounded-lg bg-white/50 border border-slate-200/50 focus:bg-white focus:border-mac-accent focus:ring-2 focus:ring-blue-100 outline-none transition-all duration-200 text-sm backdrop-blur-sm;
   }
 
-  .gradient-text {
-    @apply bg-gradient-to-r from-sky-600 to-indigo-600 bg-clip-text text-transparent;
+  .glass-panel {
+    @apply bg-white/40 backdrop-blur-md border border-white/30 shadow-lg rounded-2xl;
+  }
+  
+  .dock-item {
+    @apply transition-all duration-200 hover:-translate-y-2 hover:scale-110;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - thin and subtle like macOS */
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Smooth transitions for all interactive elements */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Animations */
-@keyframes float {
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
+@keyframes float {
   0%,
   100% {
     transform: translateY(0px);
   }
-
   50% {
     transform: translateY(-20px);
   }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
 }
 
 .animate-float {

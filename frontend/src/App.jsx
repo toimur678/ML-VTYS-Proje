@@ -24,13 +24,22 @@ function App() {
     checkUser()
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email)
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         setUser(session.user)
-      } else {
+        setLoading(false)
+      } else if (event === 'SIGNED_OUT') {
         setUser(null)
+        setLoading(false)
+      } else if (event === 'INITIAL_SESSION' && session) {
+        setUser(session.user)
+        setLoading(false)
+      } else if (event === 'INITIAL_SESSION' && !session) {
+        setUser(null)
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
@@ -40,8 +49,10 @@ function App() {
     try {
       const currentUser = await authHelpers.getCurrentUser()
       setUser(currentUser)
+      console.log('Current user:', currentUser?.email)
     } catch (error) {
       console.error('Auth check error:', error)
+      setUser(null)
     } finally {
       setLoading(false)
     }

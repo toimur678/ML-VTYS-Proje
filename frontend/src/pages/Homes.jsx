@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Home, Plus, Edit, Trash2, MapPin, Square, Bed, Tv, Zap } from 'lucide-react'
+import { Home, Plus, Edit, Trash2, MapPin, Square, Bed, Tv, Zap, X, Check } from 'lucide-react'
 import { supabase } from '../services/supabase'
 
 const Homes = ({ user }) => {
@@ -73,7 +73,7 @@ const Homes = ({ user }) => {
   const handleAddAppliance = async (e) => {
     e.preventDefault()
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('Appliances')
         .insert([{
           ...newAppliance,
@@ -82,11 +82,15 @@ const Homes = ({ user }) => {
           wattage: parseInt(newAppliance.wattage),
           avg_hours_per_day: parseFloat(newAppliance.avg_hours_per_day)
         }])
+        .select()
 
-      if (error) throw error
+      if (error) {
+        console.error('Error adding appliance:', error)
+        alert(`Failed to add appliance: ${error.message}`)
+        throw error
+      }
       
       await loadAppliances(selectedHome.home_id)
-      // Reset form to defaults
       setNewAppliance({
         appliance_type: 'fridge',
         quantity: 1,
@@ -95,11 +99,11 @@ const Homes = ({ user }) => {
       })
     } catch (error) {
       console.error('Error adding appliance:', error)
-      alert('Failed to add appliance')
     }
   }
 
   const handleDeleteAppliance = async (applianceId) => {
+    if (!window.confirm('Are you sure you want to remove this appliance?')) return
     try {
       const { error } = await supabase
         .from('Appliances')
@@ -115,39 +119,43 @@ const Homes = ({ user }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
     try {
+      const homeData = {
+        user_id: user.id,
+        address: formData.address,
+        home_type: formData.home_type,
+        size_m2: parseFloat(formData.size_m2),
+        num_rooms: parseInt(formData.num_rooms),
+        has_ac: formData.has_ac,
+        has_heater: formData.has_heater,
+      }
+
       if (editingHome) {
-        // Update existing home
         const { error } = await supabase
           .from('Homes')
-          .update({
-            ...formData,
-            size_m2: parseFloat(formData.size_m2),
-            num_rooms: parseInt(formData.num_rooms),
-          })
+          .update(homeData)
           .eq('home_id', editingHome.home_id)
-
         if (error) throw error
       } else {
-        // Create new home
         const { error } = await supabase
           .from('Homes')
-          .insert([{
-            ...formData,
-            user_id: user.id,
-            size_m2: parseFloat(formData.size_m2),
-            num_rooms: parseInt(formData.num_rooms),
-          }])
-
+          .insert([homeData])
         if (error) throw error
       }
 
-      resetForm()
+      setShowModal(false)
+      setEditingHome(null)
+      setFormData({
+        address: '',
+        home_type: 'apartment',
+        size_m2: '',
+        num_rooms: '',
+        has_ac: false,
+        has_heater: false,
+      })
       loadHomes()
     } catch (error) {
       console.error('Error saving home:', error)
-      alert('Failed to save home. Please try again.')
     }
   }
 
@@ -164,373 +172,332 @@ const Homes = ({ user }) => {
     setShowModal(true)
   }
 
-  const handleDelete = async (homeId) => {
-    if (!confirm('Are you sure you want to delete this home?')) return
-
-    try {
-      const { error } = await supabase
-        .from('Homes')
-        .delete()
-        .eq('home_id', homeId)
-
-      if (error) throw error
-      loadHomes()
-    } catch (error) {
-      console.error('Error deleting home:', error)
-      alert('Failed to delete home. Please try again.')
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this home?')) {
+      try {
+        const { error } = await supabase
+          .from('Homes')
+          .delete()
+          .eq('home_id', id)
+        if (error) throw error
+        loadHomes()
+      } catch (error) {
+        console.error('Error deleting home:', error)
+      }
     }
-  }
-
-  const resetForm = () => {
-    setFormData({
-      address: '',
-      home_type: 'apartment',
-      size_m2: '',
-      num_rooms: '',
-      has_ac: false,
-      has_heater: false,
-    })
-    setEditingHome(null)
-    setShowModal(false)
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary-600"></div>
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-24">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-slate-800 mb-2 font-display">My Homes</h1>
-          <p className="text-slate-600 text-lg">Manage your properties and their details</p>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">My Homes</h1>
+          <p className="text-slate-500 text-sm">Manage your properties and appliances</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
-          className="btn-primary flex items-center space-x-2"
+          onClick={() => {
+            setEditingHome(null)
+            setFormData({
+              address: '',
+              home_type: 'apartment',
+              size_m2: '',
+              num_rooms: '',
+              has_ac: false,
+              has_heater: false,
+            })
+            setShowModal(true)
+          }}
+          className="mac-btn flex items-center space-x-2 transition-all duration-200 hover:shadow-md"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-4 h-4" />
           <span>Add Home</span>
         </button>
       </div>
 
-      {/* Homes Grid */}
-      {homes.length === 0 ? (
-        <div className="card text-center py-16">
-          <Home className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-slate-600 mb-2">No Homes Yet</h3>
-          <p className="text-slate-500 mb-6">Add your first home to start tracking energy consumption</p>
-          <button
-            onClick={() => setShowModal(true)}
-            className="btn-primary inline-flex items-center space-x-2"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Your First Home</span>
-          </button>
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {homes.map((home, index) => (
-            <div
-              key={home.home_id}
-              className="card hover:scale-105 transition-transform duration-300"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className={`p-3 rounded-lg ${
-                  home.home_type === 'house' 
-                    ? 'bg-blue-100' 
-                    : 'bg-purple-100'
-                }`}>
-                  <Home className={`w-6 h-6 ${
-                    home.home_type === 'house'
-                      ? 'text-blue-600'
-                      : 'text-purple-600'
-                  }`} />
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => handleEdit(home)}
-                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <Edit className="w-4 h-4 text-slate-600" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(home.home_id)}
-                    className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </button>
-                </div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {homes.length > 0 ? homes.map((home) => (
+          <div key={home.home_id} className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl shadow-sm border border-white/50 hover:shadow-md transition-all duration-300 group hover:bg-white/80">
+            <div className="flex items-start justify-between mb-4">
+              <div className="bg-blue-100 p-3 rounded-xl text-blue-600 transition-transform duration-200 group-hover:scale-105">
+                <Home className="w-6 h-6" />
               </div>
-
-              <h3 className="text-lg font-bold text-slate-800 mb-3 capitalize">
-                {home.home_type}
-              </h3>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex items-start space-x-2 text-slate-600">
-                  <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <span className="line-clamp-2">{home.address}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-slate-600">
-                  <Square className="w-4 h-4" />
-                  <span>{home.size_m2} m²</span>
-                </div>
-                <div className="flex items-center space-x-2 text-slate-600">
-                  <Bed className="w-4 h-4" />
-                  <span>{home.num_rooms} rooms</span>
-                </div>
+              <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                <button
+                  onClick={() => handleEdit(home)}
+                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(home.home_id)}
+                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
+            </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-200 flex items-center space-x-3">
+            <h3 className="text-lg font-bold text-slate-800 mb-2 truncate">{home.address}</h3>
+            
+            <div className="space-y-2 mb-6">
+              <div className="flex items-center text-sm text-slate-600">
+                <Square className="w-4 h-4 mr-2 text-slate-400" />
+                <span>{home.size_m2} m² • {home.home_type}</span>
+              </div>
+              <div className="flex items-center text-sm text-slate-600">
+                <Bed className="w-4 h-4 mr-2 text-slate-400" />
+                <span>{home.num_rooms} Rooms</span>
+              </div>
+              <div className="flex items-center space-x-2 text-sm text-slate-600">
                 {home.has_ac && (
-                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
-                    AC
-                  </span>
+                  <span className="flex items-center text-blue-600 bg-blue-50 px-2 py-0.5 rounded text-xs font-medium transition-all duration-200 hover:bg-blue-100">AC</span>
                 )}
                 {home.has_heater && (
-                  <span className="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded-full">
-                    Heater
-                  </span>
-                )}
-              </div>
-              
-              <button
-                onClick={() => openApplianceModal(home)}
-                className="w-full mt-4 btn-secondary flex items-center justify-center space-x-2 text-sm py-2"
-              >
-                <Tv className="w-4 h-4" />
-                <span>Manage Appliances</span>
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Appliance Management Modal */}
-      {showApplianceModal && selectedHome && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-6 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-800">Manage Appliances</h2>
-                <p className="text-slate-600 text-sm">{selectedHome.address}</p>
-              </div>
-              <button 
-                onClick={() => setShowApplianceModal(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <span className="text-2xl">&times;</span>
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Add Appliance Form */}
-              <form onSubmit={handleAddAppliance} className="bg-slate-50 p-4 rounded-lg space-y-4">
-                <h3 className="font-semibold text-slate-700">Add New Appliance</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
-                    <select
-                      value={newAppliance.appliance_type}
-                      onChange={(e) => setNewAppliance({...newAppliance, appliance_type: e.target.value})}
-                      className="input-field text-sm"
-                    >
-                      <option value="fridge">Fridge</option>
-                      <option value="AC">AC</option>
-                      <option value="heater">Heater</option>
-                      <option value="TV">TV</option>
-                      <option value="washing_machine">Washing Machine</option>
-                      <option value="dishwasher">Dishwasher</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Quantity</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={newAppliance.quantity}
-                      onChange={(e) => setNewAppliance({...newAppliance, quantity: e.target.value})}
-                      className="input-field text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Wattage (W)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={newAppliance.wattage}
-                      onChange={(e) => setNewAppliance({...newAppliance, wattage: e.target.value})}
-                      className="input-field text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Hours/Day</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="24"
-                      step="0.1"
-                      value={newAppliance.avg_hours_per_day}
-                      onChange={(e) => setNewAppliance({...newAppliance, avg_hours_per_day: e.target.value})}
-                      className="input-field text-sm"
-                    />
-                  </div>
-                </div>
-                <button type="submit" className="btn-primary w-full text-sm py-2">
-                  Add Appliance
-                </button>
-              </form>
-
-              {/* Appliances List */}
-              <div>
-                <h3 className="font-semibold text-slate-700 mb-3">Current Appliances</h3>
-                {appliances.length === 0 ? (
-                  <p className="text-slate-500 text-sm text-center py-4">No appliances added yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {appliances.map((app) => (
-                      <div key={app.appliance_id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-blue-50 rounded-lg">
-                            <Zap className="w-4 h-4 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-800 capitalize">{app.appliance_type}</p>
-                            <p className="text-xs text-slate-500">
-                              {app.quantity} units • {app.wattage}W • {app.avg_hours_per_day}h/day
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleDeleteAppliance(app.appliance_id)}
-                          className="text-red-500 hover:text-red-700 p-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                  <span className="flex items-center text-orange-600 bg-orange-50 px-2 py-0.5 rounded text-xs font-medium transition-all duration-200 hover:bg-orange-100">Heater</span>
                 )}
               </div>
             </div>
+
+            <button
+              onClick={() => openApplianceModal(home)}
+              className="w-full py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200 text-sm font-medium flex items-center justify-center space-x-2 hover:border-slate-300"
+            >
+              <Tv className="w-4 h-4" />
+              <span>Manage Appliances</span>
+            </button>
           </div>
-        </div>
-      )}
+        )) : (
+          <div className="col-span-full bg-white/40 backdrop-blur-sm p-12 rounded-2xl border border-white/30 flex flex-col items-center justify-center text-center">
+            <div className="w-20 h-20 bg-white/50 rounded-full flex items-center justify-center mb-6 shadow-sm">
+              <Home className="w-10 h-10 text-slate-300" />
+            </div>
+            <h3 className="text-xl font-semibold text-slate-700 mb-2">No Homes Yet</h3>
+            <p className="text-slate-500 max-w-xs mb-4">
+              Add your first home to start tracking energy consumption and making predictions.
+            </p>
+            <button
+              onClick={() => setShowModal(true)}
+              className="mac-btn flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Your First Home</span>
+            </button>
+          </div>
+        )}
+      </div>
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Home Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-6 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-200">
-              <h2 className="text-2xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-white/50">
+            <div className="px-6 py-4 border-b border-slate-200/50 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-800">
                 {editingHome ? 'Edit Home' : 'Add New Home'}
               </h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Address *
-                </label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  required
-                  className="input-field"
-                  placeholder="123 Main Street, City"
-                />
+                <label className="block text-xs font-medium text-slate-500 mb-1 uppercase">Address</label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    className="mac-input pl-10"
+                    placeholder="123 Main St, City"
+                  />
+                </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Home Type *
-                  </label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1 uppercase">Type</label>
                   <select
                     value={formData.home_type}
                     onChange={(e) => setFormData({ ...formData, home_type: e.target.value })}
-                    className="input-field"
+                    className="mac-input"
                   >
                     <option value="apartment">Apartment</option>
                     <option value="house">House</option>
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Size (m²) *
-                  </label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1 uppercase">Size (m²)</label>
                   <input
                     type="number"
+                    required
                     value={formData.size_m2}
                     onChange={(e) => setFormData({ ...formData, size_m2: e.target.value })}
-                    required
-                    min="10"
-                    step="0.1"
-                    className="input-field"
-                    placeholder="100"
+                    className="mac-input"
+                    placeholder="120"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Number of Rooms *
-                </label>
+                <label className="block text-xs font-medium text-slate-500 mb-1 uppercase">Rooms</label>
                 <input
                   type="number"
+                  required
                   value={formData.num_rooms}
                   onChange={(e) => setFormData({ ...formData, num_rooms: e.target.value })}
-                  required
-                  min="1"
-                  className="input-field"
+                  className="mac-input"
                   placeholder="3"
                 />
               </div>
 
-              <div className="space-y-3">
-                <label className="flex items-center space-x-3">
+              <div className="flex space-x-6 pt-2">
+                <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.has_ac}
                     onChange={(e) => setFormData({ ...formData, has_ac: e.target.checked })}
-                    className="w-5 h-5 text-primary-600 rounded"
+                    className="rounded text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-slate-700">Has Air Conditioning</span>
+                  <span className="text-sm text-slate-700">Air Conditioning</span>
                 </label>
-
-                <label className="flex items-center space-x-3">
+                <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.has_heater}
                     onChange={(e) => setFormData({ ...formData, has_heater: e.target.checked })}
-                    className="w-5 h-5 text-primary-600 rounded"
+                    className="rounded text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-slate-700">Has Heater</span>
+                  <span className="text-sm text-slate-700">Heating</span>
                 </label>
               </div>
 
-              <div className="flex space-x-3 pt-4">
-                <button type="submit" className="flex-1 btn-primary py-3">
-                  {editingHome ? 'Update Home' : 'Add Home'}
-                </button>
+              <div className="pt-4 flex space-x-3">
                 <button
                   type="button"
-                  onClick={resetForm}
-                  className="flex-1 btn-secondary py-3"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium text-sm"
                 >
                   Cancel
                 </button>
+                <button
+                  type="submit"
+                  className="flex-1 mac-btn"
+                >
+                  {editingHome ? 'Save Changes' : 'Add Home'}
+                </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Appliances Modal */}
+      {showApplianceModal && selectedHome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-white/50 flex flex-col max-h-[80vh]">
+            <div className="px-6 py-4 border-b border-slate-200/50 flex items-center justify-between shrink-0">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Appliances</h2>
+                <p className="text-xs text-slate-500">{selectedHome.address}</p>
+              </div>
+              <button onClick={() => setShowApplianceModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Add Appliance Form */}
+              <form onSubmit={handleAddAppliance} className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/50 mb-6">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Add New Appliance</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="col-span-2 md:col-span-1">
+                    <select
+                      value={newAppliance.appliance_type}
+                      onChange={(e) => setNewAppliance({ ...newAppliance, appliance_type: e.target.value })}
+                      className="mac-input w-full"
+                    >
+                      <option value="fridge">Fridge</option>
+                      <option value="TV">TV</option>
+                      <option value="AC">AC</option>
+                      <option value="heater">Heater</option>
+                      <option value="washing_machine">Washer</option>
+                      <option value="dishwasher">Dishwasher</option>
+                    </select>
+                  </div>
+                  <input
+                    type="number"
+                    placeholder="Qty"
+                    min="1"
+                    value={newAppliance.quantity}
+                    onChange={(e) => setNewAppliance({ ...newAppliance, quantity: e.target.value })}
+                    className="mac-input"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Watts"
+                    min="0"
+                    value={newAppliance.wattage}
+                    onChange={(e) => setNewAppliance({ ...newAppliance, wattage: e.target.value })}
+                    className="mac-input"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Hrs/Day"
+                    min="0"
+                    max="24"
+                    step="0.1"
+                    value={newAppliance.avg_hours_per_day}
+                    onChange={(e) => setNewAppliance({ ...newAppliance, avg_hours_per_day: e.target.value })}
+                    className="mac-input"
+                  />
+                  <button type="submit" className="mac-btn flex items-center justify-center">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </form>
+
+              {/* Appliances List */}
+              <div className="space-y-2">
+                {appliances.length > 0 ? (
+                  appliances.map((app) => (
+                    <div key={app.appliance_id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-slate-100 p-2 rounded-lg text-slate-600">
+                          <Zap className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-800 capitalize">{app.appliance_type.replace('_', ' ')}</p>
+                          <p className="text-xs text-slate-500">
+                            {app.quantity}x • {app.wattage}W • {app.avg_hours_per_day}h/day
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteAppliance(app.appliance_id)}
+                        className="text-slate-400 hover:text-red-500 transition-colors p-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-slate-400">
+                    <p>No appliances added yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Zap, Home, Cpu, Calendar, DollarSign, TrendingUp, Loader } from 'lucide-react'
+import { Zap, Home, Cpu, Calendar, DollarSign, TrendingUp, Loader, AlertCircle } from 'lucide-react'
 import { predictionAPI } from '../services/api'
 import { supabase } from '../services/supabase'
 
@@ -92,263 +92,187 @@ const Predictor = ({ user }) => {
 
         // Save prediction to database
         if (formData.home_id) {
-          await supabase.from('Predictions').insert([
+          const { data: predData, error: predError } = await supabase.from('Predictions').insert([
             {
               home_id: parseInt(formData.home_id),
               user_id: user.id,
-              predicted_kwh: (result.predicted_bill / 0.12).toFixed(2),
-              predicted_bill: result.predicted_bill,
-              ml_confidence_score: 0.85, // Mock confidence
-            },
+              predicted_kwh: parseFloat((result.predicted_bill / 0.12).toFixed(2)),
+              predicted_bill: parseFloat(result.predicted_bill.toFixed(2)),
+              prediction_date: new Date().toISOString(),
+              ml_confidence_score: 0.95 // Mock confidence score
+            }
           ])
+          
+          if (predError) console.error('Error saving prediction:', predError)
         }
       } else {
         setError('Prediction failed. Please try again.')
       }
     } catch (err) {
       console.error('Prediction error:', err)
-      setError('Unable to generate prediction. Please check your input.')
+      setError('Failed to connect to prediction service. Is the backend running?')
     } finally {
       setLoading(false)
     }
   }
 
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ]
-
-  const getSeasonInfo = (month) => {
-    if ([12, 1, 2].includes(month)) return { name: 'Winter', factor: 1.4, color: 'text-blue-600' }
-    if ([3, 4, 5].includes(month)) return { name: 'Spring', factor: 0.9, color: 'text-green-600' }
-    if ([6, 7, 8].includes(month)) return { name: 'Summer', factor: 1.3, color: 'text-orange-600' }
-    return { name: 'Fall', factor: 1.0, color: 'text-amber-600' }
-  }
-
-  const season = getSeasonInfo(parseInt(formData.month))
-
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-24">
       {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-slate-800 mb-2 font-display">
-          Energy Bill Predictor ⚡
-        </h1>
-        <p className="text-slate-600 text-lg">
-          Get AI-powered predictions for your future energy bills
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Bill Predictor</h1>
+          <p className="text-slate-500 text-sm">AI-powered energy cost estimation</p>
+        </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Prediction Form */}
-        <div className="card">
-          <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center space-x-2">
-            <Cpu className="w-6 h-6 text-primary-600" />
-            <span>Prediction Parameters</span>
-          </h2>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Home Selection */}
+      <div className="grid lg:grid-cols-2 gap-8 items-start">
+        {/* Input Form */}
+        <div className="bg-white/60 backdrop-blur-sm p-8 rounded-2xl shadow-sm border border-white/50 transition-all duration-300 hover:shadow-md">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Select Home (Optional)
-              </label>
-              <select
-                name="home_id"
-                value={formData.home_id}
-                onChange={handleHomeSelect}
-                className="input-field"
-              >
-                <option value="">Manual Entry</option>
-                {homes.map((home) => (
-                  <option key={home.home_id} value={home.home_id}>
-                    {home.address} - {home.size_m2}m²
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Home Size */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Home Size (m²)
-              </label>
+              <label className="block text-xs font-medium text-slate-500 mb-1 uppercase">Select Home</label>
               <div className="relative">
-                <Home className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="number"
-                  name="home_size"
-                  value={formData.home_size}
-                  onChange={handleChange}
-                  required
-                  min="10"
-                  max="1000"
-                  step="0.1"
-                  className="input-field pl-11"
-                  placeholder="Enter home size"
-                />
-              </div>
-            </div>
-
-            {/* Number of Appliances */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Number of Appliances
-              </label>
-              <div className="relative">
-                <Zap className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="number"
-                  name="num_appliances"
-                  value={formData.num_appliances}
-                  onChange={handleChange}
-                  required
-                  min="0"
-                  max="50"
-                  className="input-field pl-11"
-                  placeholder="e.g., 8"
-                />
-              </div>
-            </div>
-
-            {/* Month Selection */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Prediction Month
-              </label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <Home className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <select
-                  name="month"
-                  value={formData.month}
-                  onChange={handleChange}
-                  className="input-field pl-11"
+                  name="home_id"
+                  value={formData.home_id}
+                  onChange={handleHomeSelect}
+                  className="mac-input pl-10"
                 >
-                  {months.map((month, index) => (
-                    <option key={index} value={index + 1}>
-                      {month}
+                  <option value="">-- Select a Home --</option>
+                  {homes.map(home => (
+                    <option key={home.home_id} value={home.home_id}>
+                      {home.address}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
 
-            {/* Season Info */}
-            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-600">Season</p>
-                  <p className={`text-lg font-bold ${season.color}`}>{season.name}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1 uppercase">Size (m²)</label>
+                <div className="relative">
+                  <Home className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="number"
+                    name="home_size"
+                    value={formData.home_size}
+                    onChange={handleChange}
+                    required
+                    className="mac-input pl-10"
+                    placeholder="120"
+                  />
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-600">Impact Factor</p>
-                  <p className="text-lg font-bold text-slate-800">{season.factor}x</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1 uppercase">Appliances</label>
+                <div className="relative">
+                  <Cpu className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="number"
+                    name="num_appliances"
+                    value={formData.num_appliances}
+                    onChange={handleChange}
+                    required
+                    className="mac-input pl-10"
+                    placeholder="5"
+                  />
                 </div>
               </div>
             </div>
 
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1 uppercase">Month</label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <select
+                  name="month"
+                  value={formData.month}
+                  onChange={handleChange}
+                  className="mac-input pl-10"
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={i + 1}>
+                      {new Date(0, i).toLocaleString('default', { month: 'long' })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
-                {error}
+              <div className="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-lg text-sm animate-fade-in">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full btn-primary py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mac-btn py-3 text-base flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/20 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/30"
             >
               {loading ? (
-                <div className="flex items-center justify-center space-x-2">
+                <>
                   <Loader className="w-5 h-5 animate-spin" />
-                  <span>Generating Prediction...</span>
-                </div>
+                  <span>Calculating...</span>
+                </>
               ) : (
-                'Predict Energy Bill'
+                <>
+                  <Zap className="w-5 h-5" />
+                  <span>Predict Bill</span>
+                </>
               )}
             </button>
           </form>
         </div>
 
-        {/* Prediction Results */}
+        {/* Results Panel */}
         <div className="space-y-6">
           {prediction ? (
-            <>
-              <div className="card bg-gradient-to-br from-primary-500 to-indigo-600 text-white">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold">Predicted Bill</h3>
-                  <DollarSign className="w-8 h-8" />
-                </div>
-                <p className="text-5xl font-bold mb-2">${prediction.bill.toFixed(2)}</p>
-                <p className="opacity-90">
-                  For {months[prediction.month - 1]} {new Date().getFullYear()}
-                </p>
-              </div>
-
-              <div className="card">
-                <h3 className="text-xl font-bold text-slate-800 mb-4">Breakdown</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="bg-yellow-100 p-2 rounded-lg">
-                        <Zap className="w-5 h-5 text-yellow-600" />
-                      </div>
-                      <span className="text-slate-700">Estimated Usage</span>
-                    </div>
-                    <span className="font-bold text-slate-800">{prediction.kwh} kWh</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="bg-green-100 p-2 rounded-lg">
-                        <Home className="w-5 h-5 text-green-600" />
-                      </div>
-                      <span className="text-slate-700">Home Size</span>
-                    </div>
-                    <span className="font-bold text-slate-800">{formData.home_size} m²</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="bg-purple-100 p-2 rounded-lg">
-                        <Cpu className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <span className="text-slate-700">Appliances</span>
-                    </div>
-                    <span className="font-bold text-slate-800">{formData.num_appliances}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="bg-blue-100 p-2 rounded-lg">
-                        <TrendingUp className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <span className="text-slate-700">Season Factor</span>
-                    </div>
-                    <span className="font-bold text-slate-800">{season.factor}x</span>
-                  </div>
+            <div className="bg-white/80 backdrop-blur-md p-8 rounded-2xl shadow-lg border border-white/60 animate-fade-in transition-all duration-300">
+              <div className="text-center mb-8">
+                <p className="text-slate-500 font-medium mb-2">Estimated Bill for {new Date(0, prediction.month - 1).toLocaleString('default', { month: 'long' })}</p>
+                <div className="flex items-center justify-center text-5xl font-bold text-slate-800 tracking-tighter">
+                  <span className="text-3xl mr-1 text-slate-400">$</span>
+                  {prediction.bill.toFixed(2)}
                 </div>
               </div>
 
-              <div className="card bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
-                <h3 className="text-lg font-bold text-green-800 mb-3">💡 Energy Saving Tips</h3>
-                <ul className="space-y-2 text-sm text-green-700">
-                  <li>• Use energy-efficient LED bulbs to reduce consumption</li>
-                  <li>• Set your thermostat 2-3°F lower in winter, higher in summer</li>
-                  <li>• Unplug devices when not in use to prevent phantom energy drain</li>
-                  <li>• Run dishwasher and laundry during off-peak hours</li>
-                </ul>
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="bg-blue-50 p-4 rounded-xl text-center transition-all duration-200 hover:bg-blue-100">
+                  <p className="text-xs text-blue-600 font-semibold uppercase mb-1">Consumption</p>
+                  <p className="text-xl font-bold text-slate-800">{prediction.kwh} kWh</p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-xl text-center transition-all duration-200 hover:bg-green-100">
+                  <p className="text-xs text-green-600 font-semibold uppercase mb-1">Savings Potential</p>
+                  <p className="text-xl font-bold text-slate-800">~15%</p>
+                </div>
               </div>
-            </>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-slate-700">Recommendations</h4>
+                <div className="flex items-start space-x-3 p-3 bg-slate-50 rounded-lg text-sm text-slate-600 transition-all duration-200 hover:bg-slate-100">
+                  <TrendingUp className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <p>Consider running high-energy appliances during off-peak hours to reduce costs.</p>
+                </div>
+                <div className="flex items-start space-x-3 p-3 bg-slate-50 rounded-lg text-sm text-slate-600 transition-all duration-200 hover:bg-slate-100">
+                  <Zap className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                  <p>Your predicted usage is slightly higher than average for this home size.</p>
+                </div>
+              </div>
+            </div>
           ) : (
-            <div className="card h-full flex items-center justify-center text-center py-12">
-              <div>
-                <Cpu className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-slate-600 mb-2">Ready to Predict</h3>
-                <p className="text-slate-500">
-                  Fill in the form to generate your AI-powered energy bill prediction
-                </p>
+            <div className="bg-white/40 backdrop-blur-sm p-8 rounded-2xl border border-white/30 flex flex-col items-center justify-center min-h-[400px] text-center transition-all duration-300 hover:bg-white/50">
+              <div className="w-20 h-20 bg-white/50 rounded-full flex items-center justify-center mb-6 shadow-sm">
+                <Zap className="w-10 h-10 text-slate-300" />
               </div>
+              <h3 className="text-xl font-semibold text-slate-700 mb-2">Ready to Predict</h3>
+              <p className="text-slate-500 max-w-xs">
+                Fill out the form to get an AI-powered estimate of your next electricity bill.
+              </p>
             </div>
           )}
         </div>

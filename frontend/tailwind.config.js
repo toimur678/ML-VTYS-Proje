@@ -7,10 +7,21 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter var', 'system-ui', 'sans-serif'],
-        display: ['Poppins', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', 'San Francisco', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'sans-serif'],
+        display: ['SF Pro Display', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       },
       colors: {
+        mac: {
+          gray: '#F5F5F7',
+          light: 'rgba(255, 255, 255, 0.8)',
+          glass: 'rgba(255, 255, 255, 0.6)',
+          dark: 'rgba(0, 0, 0, 0.8)',
+          accent: '#007AFF',
+          success: '#34C759',
+          warning: '#FF9500',
+          danger: '#FF3B30',
+          window: 'rgba(255, 255, 255, 0.85)',
+        },
         primary: {
           50: '#f0f9ff',
           100: '#e0f2fe',

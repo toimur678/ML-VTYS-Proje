@@ -1,12 +1,10 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Home, Zap, BarChart3, Clock, LogOut, Menu, X } from 'lucide-react'
-import { useState } from 'react'
+import { Home, Zap, BarChart3, Clock, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
 import { authHelpers } from '../services/supabase'
 
 const Layout = ({ user, setUser }) => {
   const location = useLocation()
   const navigate = useNavigate()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -26,24 +24,61 @@ const Layout = ({ user, setUser }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-white shadow-xl flex-col border-r border-slate-200 z-10">
-        {/* Logo */}
-        <div className="p-6 border-b border-slate-200">
-          <div className="flex items-center space-x-2">
-            <div className="bg-gradient-to-br from-primary-500 to-indigo-600 p-2 rounded-lg">
-              <Zap className="w-6 h-6 text-white" />
+    <div className="h-screen w-screen overflow-hidden flex flex-col relative bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+      {/* Main Desktop Area */}
+      <main className="flex-1 relative overflow-hidden flex flex-col">
+        {/* Full Screen Container */}
+        <div className="w-full h-full flex flex-col animate-fade-in">
+          {/* Top Navigation Bar */}
+          <div className="h-14 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex items-center justify-between px-6 shrink-0 select-none sticky top-0 z-40">
+            {/* Navigation Controls */}
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-1">
+                <button 
+                  onClick={() => navigate(-1)} 
+                  className="p-1.5 rounded-md hover:bg-slate-200/50 text-slate-500 hover:text-slate-800 transition-all duration-200"
+                  title="Go Back"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => navigate(1)} 
+                  className="p-1.5 rounded-md hover:bg-slate-200/50 text-slate-500 hover:text-slate-800 transition-all duration-200"
+                  title="Go Forward"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold gradient-text font-display">EnergyAI</h1>
-              <p className="text-xs text-slate-500">Smart Predictions</p>
+
+            {/* Page Title */}
+            <div className="flex items-center space-x-2 text-slate-600 text-sm font-semibold absolute left-1/2 transform -translate-x-1/2">
+              {navigation.find(n => n.href === location.pathname)?.icon && (
+                <div className="opacity-50">
+                  {(() => {
+                    const Icon = navigation.find(n => n.href === location.pathname)?.icon
+                    return <Icon className="w-4 h-4" />
+                  })()}
+                </div>
+              )}
+              <span>{navigation.find(n => n.href === location.pathname)?.name || 'EnergyAI'}</span>
+            </div>
+
+            <div className="w-24"></div> {/* Spacer for centering */}
+          </div>
+
+          {/* Window Content - Full Screen with Smooth Scroll */}
+          <div className="flex-1 overflow-y-auto bg-transparent px-6 py-6 scroll-smooth scrollbar-hide">
+            <div className="max-w-7xl mx-auto">
+              <Outlet />
             </div>
           </div>
         </div>
+      </main>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-6 space-y-2">
+      {/* Dock */}
+      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+        <div className="bg-white/20 backdrop-blur-2xl border border-white/20 rounded-2xl p-2.5 flex items-end space-x-3 shadow-2xl ring-1 ring-white/20">
           {navigation.map((item) => {
             const Icon = item.icon
             const isActive = location.pathname === item.href
@@ -51,100 +86,46 @@ const Layout = ({ user, setUser }) => {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  isActive
-                    ? 'bg-gradient-to-r from-primary-500 to-indigo-600 text-white shadow-md'
-                    : 'text-slate-600 hover:bg-slate-100'
+                className={`group relative p-3 rounded-2xl transition-all duration-300 ease-out hover:-translate-y-4 hover:scale-110 hover:mx-2 ${
+                  isActive ? 'bg-white/40 shadow-inner' : 'hover:bg-white/30'
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="font-medium">{item.name}</span>
+                <div className={`w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br shadow-lg transition-all duration-300 ${
+                  isActive 
+                    ? 'from-blue-500 to-blue-600 text-white shadow-blue-500/30' 
+                    : 'from-slate-100 to-slate-200 text-slate-600 group-hover:from-white group-hover:to-slate-100'
+                }`}>
+                  <Icon className="w-7 h-7" />
+                </div>
+                {isActive && (
+                  <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-slate-800/60 rounded-full"></div>
+                )}
+                
+                {/* Tooltip */}
+                <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-slate-800/90 backdrop-blur-md text-white text-xs font-medium py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap shadow-xl translate-y-2 group-hover:translate-y-0">
+                  {item.name}
+                  <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800/90"></div>
+                </div>
               </Link>
             )
           })}
-        </nav>
+          
+          <div className="w-px h-12 bg-white/20 mx-1"></div>
 
-        {/* User Profile & Logout */}
-        <div className="p-4 border-t border-slate-200">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-indigo-500 flex items-center justify-center text-white font-semibold">
-                {user?.email?.[0]?.toUpperCase() || 'U'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">{user?.email || 'User'}</p>
-                <p className="text-xs text-slate-500">Account Settings</p>
-              </div>
-            </div>
-          </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+            className="group relative p-3 rounded-2xl transition-all duration-300 ease-out hover:-translate-y-4 hover:scale-110 hover:mx-2 hover:bg-white/30"
           >
-            <LogOut className="w-4 h-4" />
-            <span className="font-medium">Logout</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Mobile Header */}
-      <header className="md:hidden fixed top-0 left-0 right-0 bg-white shadow-md z-20">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center space-x-2">
-            <div className="bg-gradient-to-br from-primary-500 to-indigo-600 p-2 rounded-lg">
-              <Zap className="w-5 h-5 text-white" />
+            <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-red-600 text-white shadow-lg shadow-red-500/30">
+              <LogOut className="w-7 h-7 pl-1" />
             </div>
-            <h1 className="text-lg font-bold gradient-text font-display">EnergyAI</h1>
-          </div>
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 hover:bg-slate-100 rounded-lg"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-slate-800/90 backdrop-blur-md text-white text-xs font-medium py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap shadow-xl translate-y-2 group-hover:translate-y-0">
+              Logout
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800/90"></div>
+            </div>
           </button>
         </div>
-
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="border-t border-slate-200 bg-white">
-            <nav className="p-4 space-y-2">
-              {navigation.map((item) => {
-                const Icon = item.icon
-                const isActive = location.pathname === item.href
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                      isActive
-                        ? 'bg-gradient-to-r from-primary-500 to-indigo-600 text-white'
-                        : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{item.name}</span>
-                  </Link>
-                )
-              })}
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg"
-              >
-                <LogOut className="w-5 h-5" />
-                <span className="font-medium">Logout</span>
-              </button>
-            </nav>
-          </div>
-        )}
-      </header>
-
-      {/* Main Content */}
-      <main className="md:ml-64 min-h-screen pt-20 md:pt-0">
-        <div className="p-6 md:p-8">
-          <Outlet />
-        </div>
-      </main>
+      </div>
     </div>
   )
 }
