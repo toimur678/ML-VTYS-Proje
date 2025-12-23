@@ -13,6 +13,9 @@ export const predictionAPI = {
   // Predict energy bill
   predictBill: async (homeSize, numAppliances, month) => {
     try {
+      // API ENDPOINT: POST /predict - Machine Learning prediction endpoint
+      // Calls Flask backend ML model to predict energy bill
+      // Used by: Predictor.jsx (line 80)
       const response = await api.post('/predict', {
         home_size: homeSize,
         num_appliances: numAppliances,

@@ -27,6 +27,8 @@ const History = ({ user }) => {
   const loadHistory = async () => {
     try {
       // Get user's homes
+      // DATABASE QUERY: SELECT from Homes table (Entity #2)
+      // Uses: RLS Policy homes_select_own
       const { data: homesData } = await supabase
         .from('Homes')
         .select('home_id, address')
@@ -38,6 +40,11 @@ const History = ({ user }) => {
         const homeIds = homesData.map(h => h.home_id)
 
         // Get consumption history
+        // DATABASE QUERY: SELECT from EnergyConsumption table (Entity #3)
+        // Could use View: vw_MonthlyConsumption for formatted results
+        // User-defined function: fn_CalculateSeasonFactor(month) calculates seasonal multipliers
+        // Uses: Indexes idx_consumption_home, idx_consumption_date
+        // RLS Policy: consumption_select_own
         const { data: consumption } = await supabase
           .from('EnergyConsumption')
           .select('*, home_id')
@@ -54,6 +61,10 @@ const History = ({ user }) => {
         setHistory(consumptionWithHomes)
 
         // Get predictions
+        // DATABASE QUERY: SELECT from Predictions table (Entity #4) with JOIN to Homes
+        // Could use View: vw_PredictionAccuracy to compare with actual bills
+        // Uses: Index idx_predictions_date
+        // RLS Policy: predictions_select_own
         const { data: predictionData } = await supabase
           .from('Predictions')
           .select('*, Homes(address)')
@@ -74,6 +85,10 @@ const History = ({ user }) => {
     e.preventDefault()
     try {
       // Add to EnergyConsumption
+      // DATABASE INSERT: EnergyConsumption table (Entity #3)
+      // Enforces: UNIQUE constraint (home_id, month, year)
+      // CHECK constraints: month BETWEEN 1 AND 12, year >= 2020, kwh_used >= 0, bill_amount >= 0
+      // RLS Policy: consumption_insert_own
       const { data: consumptionData, error: consumptionError } = await supabase
         .from('EnergyConsumption')
         .insert([{
@@ -88,6 +103,11 @@ const History = ({ user }) => {
       if (consumptionError) throw consumptionError
       
       // Add to BillHistory - using correct field names matching database schema
+      // DATABASE INSERT: BillHistory table (Entity #6)
+      // Stored procedure sp_MonthlyReport can be used to generate reports
+      // Enforces: UNIQUE constraint (home_id, month, year)
+      // CHECK constraints: month BETWEEN 1 AND 12, year >= 2020, actual_amount >= 0
+      // RLS Policy: bill_insert_own
       const dueDate = new Date()
       dueDate.setMonth(dueDate.getMonth() + 1)
       

@@ -16,6 +16,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Auth helpers
 export const authHelpers = {
   signUp: async (email, password, name, phone) => {
+    // AUTHENTICATION: Create new user in auth.users
+    // TRIGGER: on_auth_user_created automatically calls handle_new_user() function
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -24,6 +26,11 @@ export const authHelpers = {
     if (authError) throw authError
     
     // Insert user data into Users table
+    // DATABASE INSERT: Users table (Entity #1)
+    // Enforces: UNIQUE constraint on email and phone
+    // CHECK constraint: role IN ('admin', 'user')
+    // Uses: Index idx_users_email
+    // RLS Policy: user_insert_own - validates user_id matches auth.uid()
     const { data, error } = await supabase
       .from('Users')
       .insert([{ 
@@ -44,6 +51,7 @@ export const authHelpers = {
   },
 
   signIn: async (email, password) => {
+    // AUTHENTICATION: Sign in with Supabase Auth
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -51,6 +59,8 @@ export const authHelpers = {
     if (error) throw error
     
     // Ensure user exists in Users table (fix for foreign key issue)
+    // DATABASE SELECT & INSERT: Users table (Entity #1)
+    // Auto-sync with auth.users to maintain referential integrity for foreign keys
     try {
       const { data: existingUser } = await supabase
         .from('Users')
@@ -60,6 +70,8 @@ export const authHelpers = {
       
       if (!existingUser) {
         // Create user in Users table if it doesn't exist
+        // DATABASE INSERT: Users table (Entity #1) - Backfill for existing auth users
+        // Maintains foreign key integrity for Homes, Predictions tables
         const { error: insertError } = await supabase
           .from('Users')
           .insert([{

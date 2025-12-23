@@ -21,6 +21,8 @@ const Predictor = ({ user }) => {
 
   const loadHomes = async () => {
     try {
+      // DATABASE QUERY: SELECT from Homes table (Entity #2)
+      // Uses: RLS Policy homes_select_own, index idx_homes_user
       const { data } = await supabase
         .from('Homes')
         .select('*')
@@ -49,6 +51,8 @@ const Predictor = ({ user }) => {
 
   const loadAppliances = async (homeId) => {
     try {
+      // DATABASE QUERY: SELECT from Appliances table (Entity #5) with aggregation
+      // Uses: RLS Policy appliances_select_own, index idx_appliances_home
       const { data } = await supabase
         .from('Appliances')
         .select('quantity')
@@ -92,6 +96,11 @@ const Predictor = ({ user }) => {
 
         // Save prediction to database
         if (formData.home_id) {
+          // DATABASE INSERT: Predictions table (Entity #4)
+          // Could use stored procedure: sp_SavePrediction for this operation
+          // Enforces: CHECK constraints on predicted_kwh >= 0, predicted_bill >= 0
+          // ml_confidence_score BETWEEN 0 AND 1
+          // RLS Policy: predictions_insert_own - validates user_id
           const { data: predData, error: predError } = await supabase.from('Predictions').insert([
             {
               home_id: parseInt(formData.home_id),

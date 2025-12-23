@@ -26,6 +26,9 @@ const Dashboard = ({ user }) => {
   const loadDashboardData = async () => {
     try {
       // Get user's homes
+      // DATABASE QUERY: SELECT from Homes table (Entity #2)
+      // Could use View: vw_UserHomeSummary for combined user/home data
+      // Uses: RLS Policy homes_select_own, index idx_homes_user
       const { data: homes } = await supabase
         .from('Homes')
         .select('home_id, address, home_type, size_m2')
@@ -35,6 +38,11 @@ const Dashboard = ({ user }) => {
         const homeIds = homes.map(h => h.home_id)
 
         // Get consumption data
+        // DATABASE QUERY: SELECT from EnergyConsumption table (Entity #3)
+        // Could use Views: vw_MonthlyConsumption or vw_HighConsumers (kwh_used > 500)
+        // Enforces: UNIQUE constraint (home_id, month, year)
+        // Uses: Indexes idx_consumption_home, idx_consumption_date
+        // RLS Policy: consumption_select_own
         const { data: consumption } = await supabase
           .from('EnergyConsumption')
           .select('kwh_used, bill_amount, month, year, home_id')
@@ -44,6 +52,10 @@ const Dashboard = ({ user }) => {
           .limit(12)
 
         // Get recent predictions
+        // DATABASE QUERY: SELECT from Predictions table (Entity #4)
+        // Uses: User-defined function fn_GetAverageBill could calculate average
+        // Indexes: idx_predictions_home, idx_predictions_date
+        // RLS Policy: predictions_select_own
         const { data: predictions, error: predError } = await supabase
           .from('Predictions')
           .select('prediction_id, home_id, predicted_kwh, predicted_bill, prediction_date, ml_confidence_score')
@@ -66,6 +78,10 @@ const Dashboard = ({ user }) => {
         )
 
         // Get bill history with payment status
+        // DATABASE QUERY: SELECT from BillHistory table (Entity #6)
+        // Enforces: UNIQUE constraint (home_id, month, year)
+        // Uses: Index idx_bills_home
+        // RLS Policy: bill_select_own
         const { data: bills } = await supabase
           .from('BillHistory')
           .select('*')
@@ -82,6 +98,10 @@ const Dashboard = ({ user }) => {
         setBillHistory(billsWithHomes)
 
         // Get appliance data for impact chart
+        // DATABASE QUERY: SELECT from Appliances table (Entity #5)
+        // Could use View: vw_ApplianceImpact for pre-aggregated stats
+        // Uses: Index idx_appliances_home
+        // RLS Policy: appliances_select_own
         const { data: appliances } = await supabase
           .from('Appliances')
           .select('appliance_type, wattage, quantity, avg_hours_per_day')
@@ -145,6 +165,8 @@ const Dashboard = ({ user }) => {
 
   const handleMarkBillPaid = async (billId) => {
     try {
+      // DATABASE UPDATE: BillHistory table (Entity #6)
+      // RLS Policy: bill_update_own - user must own the home
       const { error } = await supabase
         .from('BillHistory')
         .update({ paid: true, payment_date: new Date().toISOString().split('T')[0] })

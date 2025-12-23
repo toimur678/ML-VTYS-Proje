@@ -34,6 +34,9 @@ const Homes = ({ user }) => {
 
   const loadHomes = async () => {
     try {
+      // DATABASE QUERY: SELECT from Homes table (Entity #2)
+      // Uses: Foreign key constraint (fk_homes_user), user_id index (idx_homes_user)
+      // RLS Policy: homes_select_own - ensures users only see their own homes
       const { data, error } = await supabase
         .from('Homes')
         .select('*')
@@ -58,6 +61,10 @@ const Homes = ({ user }) => {
 
   const loadAppliances = async (homeId) => {
     try {
+      // DATABASE QUERY: SELECT from Appliances table (Entity #5)
+      // Uses: Foreign key (fk_appliances_home), index (idx_appliances_home)
+      // CHECK Constraints: appliance_type, quantity > 0, avg_hours_per_day BETWEEN 0 AND 24, wattage > 0
+      // RLS Policy: appliances_select_own
       const { data, error } = await supabase
         .from('Appliances')
         .select('*')
@@ -73,6 +80,9 @@ const Homes = ({ user }) => {
   const handleAddAppliance = async (e) => {
     e.preventDefault()
     try {
+      // DATABASE INSERT: Appliances table (Entity #5)
+      // Enforces: CHECK constraints on quantity, wattage, avg_hours_per_day, appliance_type
+      // RLS Policy: appliances_insert_own - validates user owns the home
       const { data, error } = await supabase
         .from('Appliances')
         .insert([{
@@ -105,6 +115,8 @@ const Homes = ({ user }) => {
   const handleDeleteAppliance = async (applianceId) => {
     if (!window.confirm('Are you sure you want to remove this appliance?')) return
     try {
+      // DATABASE DELETE: Appliances table (Entity #5)
+      // RLS Policy: appliances_delete_own - ensures user owns the home
       const { error } = await supabase
         .from('Appliances')
         .delete()
@@ -131,12 +143,18 @@ const Homes = ({ user }) => {
       }
 
       if (editingHome) {
+        // DATABASE UPDATE: Homes table (Entity #2)
+        // RLS Policy: homes_update_own - user must own the home
+        // Enforces: CHECK constraints on home_type, size_m2 > 0, num_rooms > 0
         const { error } = await supabase
           .from('Homes')
           .update(homeData)
           .eq('home_id', editingHome.home_id)
         if (error) throw error
       } else {
+        // DATABASE INSERT: Homes table (Entity #2)
+        // Foreign key: user_id references Users table with CASCADE delete
+        // RLS Policy: homes_insert_own - validates user_id matches authenticated user
         const { error } = await supabase
           .from('Homes')
           .insert([homeData])
@@ -175,6 +193,9 @@ const Homes = ({ user }) => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this home?')) {
       try {
+        // DATABASE DELETE: Homes table (Entity #2)
+        // CASCADE DELETE: Also removes related Appliances, EnergyConsumption, Predictions, BillHistory
+        // RLS Policy: homes_delete_own - user must own the home
         const { error } = await supabase
           .from('Homes')
           .delete()
